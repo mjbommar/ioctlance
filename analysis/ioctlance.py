@@ -269,9 +269,11 @@ def find_targets(driver_path):
         except:
             continue
 
-        # Use regular expression to find opcode int and out in the binary.
-        is_out = re.search('out[ \t]+%([a-z0-9]+),\(%([a-z0-9]+)\)$', line)
-        is_int = re.search('[ \t]*int[ \t]*', line)
+        # Find sensitive x86 instructions in objdump output that could be vulnerability vectors
+        # Match 'out' instruction format: "out %al,(%dx)" for I/O port operations
+        is_out = re.search(r'out[ \t]+%([a-z0-9]+),\(%([a-z0-9]+)\)$', line)
+        # Match 'int' instruction for software interrupts
+        is_int = re.search(r'[ \t]*int[ \t]*', line)
 
         # Hook the target opcode.
         if is_out:
