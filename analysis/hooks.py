@@ -162,7 +162,7 @@ class HookProbeForRead(angr.SimProcedure):
     def run(self, Address, Length, Alignment):
         if globals.phase == 2:
             if 'tainted_ProbeForRead' in self.state.globals and utils.tainted_buffer(Address):
-                asts = [i for i in Address.recursive_children_asts]
+                asts = [i for i in Address.children_asts()]
                 target_base = asts[0] if len(asts) > 1 else Address
 
                 ret_addr = hex(self.state.callstack.ret_addr)
@@ -173,7 +173,7 @@ class HookProbeForWrite(angr.SimProcedure):
     def run(self, Address, Length, Alignment):
         if globals.phase == 2:
             if 'tainted_ProbeForWrite' in self.state.globals and utils.tainted_buffer(Address):
-                asts = [i for i in Address.recursive_children_asts]
+                asts = [i for i in Address.children_asts()]
                 target_base = asts[0] if len(asts) > 1 else Address
                 ret_addr = hex(self.state.callstack.ret_addr)
                 self.state.globals['tainted_ProbeForWrite'] += (str(target_base), )
@@ -183,7 +183,7 @@ class HookMmIsAddressValid(angr.SimProcedure):
     def run(self, VirtualAddress):
         if globals.phase == 2:
             if 'tainted_MmIsAddressValid' in self.state.globals and utils.tainted_buffer(VirtualAddress):
-                asts = [i for i in VirtualAddress.recursive_children_asts]
+                asts = [i for i in VirtualAddress.children_asts()]
                 target_base = asts[0] if len(asts) > 1 else VirtualAddress
                 ret_addr = hex(self.state.callstack.ret_addr)
                 self.state.globals['tainted_MmIsAddressValid'] += (str(target_base), )
@@ -434,11 +434,11 @@ class HookZwTerminateProcess(angr.SimProcedure):
 class HookMemcpy(angr.SimProcedure):
     def run(self, dest, src, size):
         ret_addr = hex(self.state.callstack.ret_addr)
-        dest_asts = [i for i in dest.recursive_children_asts]
+        dest_asts = [i for i in dest.children_asts()]
         dest_base = dest_asts[0] if len(dest_asts) > 1 else dest
         dest_vars = dest.variables
 
-        src_asts = [i for i in src.recursive_children_asts]
+        src_asts = [i for i in src.children_asts()]
         src_base = src_asts[0] if len(src_asts) > 1 else src
         src_vars = src.variables
 

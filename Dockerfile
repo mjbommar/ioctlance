@@ -71,12 +71,13 @@ ENV PATH="/home/ioctlance/.local/bin:$PATH"
 
 # Create virtual environment and install Python dependencies using uv
 # Need --prerelease=allow for unicorn==1.0.2rc4 dependency
+# Upgraded to latest angr (9.2.170) with compatible dependencies
 RUN uv venv /home/ioctlance/.venv && \
     uv pip install --prerelease=allow \
-    angr==9.2.18 \
-    ipython==8.5.0 \
-    ipdb==0.13.9 \
-    capstone==5.0.1
+    angr==9.2.170 \
+    ipython \
+    ipdb \
+    capstone
 
 # Set environment to use the virtual environment
 ENV PATH="/home/ioctlance/.venv/bin:$PATH"
