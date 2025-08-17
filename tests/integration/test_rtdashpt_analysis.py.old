@@ -1,0 +1,133 @@
+"""Integration test for RtDashPt.sys driver analysis."""
+
+import json
+from pathlib import Path
+
+import pytest
+
+from ioctlance.core.driver_analyzer import analyze_driver
+from ioctlance.models import AnalysisResult
+
+
+@pytest.fixture
+def rtdashpt_driver_path() -> Path:
+    """Get path to RtDashPt.sys sample driver."""
+    return Path("samples/RtDashPt.sys")
+
+
+@pytest.fixture
+def expected_result() -> dict:
+    """Load expected result from reference JSON."""
+    with open("samples/RtDashPt.sys.json") as f:
+        return json.load(f)
+
+
+def test_rtdashpt_full_analysis(rtdashpt_driver_path: Path, expected_result: dict):
+    """Test complete analysis of RtDashPt.sys driver.
+
+    This test verifies that:
+    1. The IOCTL handler is correctly identified
+    2. All IOCTL codes are discovered
+    3. At least one vulnerability is found (null pointer dereference)
+    4. Analysis completes within reasonable time (60 seconds)
+    """
+    # Analyze the driver with a timeout of 60 seconds for accuracy
+    result = analyze_driver(rtdashpt_driver_path, timeout=60)
+
+    # Verify the result is an AnalysisResult instance
+    assert isinstance(result, AnalysisResult)
+
+    # Verify basic info matches expected - MUST BE ACCURATE
+    assert result.basic.ioctl_handler == expected_result["basic"]["ioctl handler"]  # Note the space
+    assert len(result.basic.IoControlCodes) == len(expected_result["basic"]["IoControlCodes"])
+    assert set(result.basic.IoControlCodes) == set(expected_result["basic"]["IoControlCodes"])
+
+    # Verify at least one vulnerability is found
+    assert result.has_vulnerabilities
+    assert result.vulnerability_count >= 1
+
+    # Check for the known null pointer dereference vulnerability
+    null_ptr_vulns = [
+        v for v in result.vuln
+        if "null pointer" in v.title.lower()
+    ]
+    assert len(null_ptr_vulns) > 0, "Expected null pointer dereference vulnerability not found"
+
+    # Verify the specific null pointer vulnerability details
+    null_ptr = null_ptr_vulns[0]
+    assert null_ptr.eval.IoControlCode == "0x12c8c0"
+    assert null_ptr.eval.SystemBuffer == "0x0"
+    assert null_ptr.eval.InputBufferLength == "0x0"
+
+    # Verify no errors occurred during analysis
+    assert len(result.error) == 0, f"Errors during analysis: {result.error}"
+
+
+def test_rtdashpt_ioctl_handler_discovery(rtdashpt_driver_path: Path):
+    """Test that IOCTL handler is correctly discovered."""
+    from ioctlance.core.ioctl_handler import find_ioctl_handler
+
+    # Find the IOCTL handler
+    handler = find_ioctl_handler(rtdashpt_driver_path)
+
+    # Verify handler is found and has correct address
+    assert handler is not None
+    assert handler.address == "0x140007080"
+
+    # Verify IOCTL codes are discovered
+    assert len(handler.ioctl_codes) == 7
+    expected_codes = [
+        "0x12c804", "0x12c810", "0x12c8c0",
+        "0x12c8c4", "0x12c814", "0x12c80c", "0x12c800"
+    ]
+    assert set(handler.ioctl_codes) == set(expected_codes)
+
+
+def test_rtdashpt_vulnerability_detection(rtdashpt_driver_path: Path):
+    """Test vulnerability detection for known issues."""
+    from ioctlance.core.vulnerability_hunter import hunt_vulnerabilities
+    from ioctlance.core.ioctl_handler import find_ioctl_handler
+
+    # First find the IOCTL handler
+    handler = find_ioctl_handler(rtdashpt_driver_path)
+    assert handler is not None
+
+    # Hunt for vulnerabilities with specific IOCTL code
+    vulnerabilities = hunt_vulnerabilities(
+        driver_path=rtdashpt_driver_path,
+        ioctl_handler=handler,
+        ioctl_code="0x12c8c0",  # Known vulnerable IOCTL
+        timeout=60
+    )
+
+    # Verify null pointer dereference is found
+    assert len(vulnerabilities) > 0
+    null_ptr_vulns = [
+        v for v in vulnerabilities
+        if v.vulnerability_type == "NULL_POINTER_DEREFERENCE"
+    ]
+    assert len(null_ptr_vulns) > 0
+
+
+def test_rtdashpt_performance_metrics(rtdashpt_driver_path: Path):
+    """Test that performance metrics are collected."""
+    from ioctlance.core.driver_analyzer import analyze_driver_with_metrics
+
+    # Analyze with metrics collection
+    result, metrics = analyze_driver_with_metrics(rtdashpt_driver_path, timeout=120)
+
+    # Verify metrics are collected
+    assert metrics is not None
+    assert "ioctl_handler" in metrics.time
+    assert "hunting_vulns" in metrics.time
+    assert metrics.time["hunting_vulns"] < 120  # Should complete within timeout
+
+    # Verify memory metrics
+    assert "ioctl_handler" in metrics.memory
+    assert "hunting_vulns" in metrics.memory
+    assert metrics.memory["hunting_vulns"] > 0
+
+    # Verify unique addresses explored
+    assert "ioctl_handler" in metrics.unique_addr
+    assert "hunting_vulns" in metrics.unique_addr
+    assert metrics.unique_addr["hunting_vulns"] > 0

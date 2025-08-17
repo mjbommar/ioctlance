@@ -1,0 +1,68 @@
+# Ruff configuration for IOCTLance
+# This duplicates pyproject.toml settings for tools that prefer ruff.toml
+
+line-length = 120
+target-version = "py313"
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "W",      # pycodestyle warnings
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+    "ASYNC",  # flake8-async
+]
+
+ignore = [
+    # Line length - sometimes long lines are more readable
+    "E501",   
+    
+    # Bare except - sometimes we need to catch all exceptions
+    "E722",   
+    
+    # Module level imports not at top - sometimes needed for lazy loading
+    "E402",   
+    
+    # Complexity warnings - some functions are necessarily complex
+    "C901",   
+    
+    # Security warnings - we're careful with subprocess usage
+    "S603",   # subprocess without shell=False
+    "S607",   # Starting process with partial path
+    
+    # Too many arguments/locals/statements - sometimes necessary
+    "PLR0912", # Too many branches
+    "PLR0913", # Too many arguments
+    "PLR0915", # Too many statements
+    
+    # Import at top of file - sometimes we need lazy imports
+    "I001",    
+    
+    # Unused imports/variables - handled by other tools
+    "F401",   # Module imported but unused (handled case by case)
+    "F403",   # Star imports used - needed for hook modules
+    "F841",   # Local variable assigned but never used
+    
+    # Loop variables - sometimes we iterate for side effects
+    "B007",   # Loop control variable not used within loop body
+]
+
+[lint.per-file-ignores]
+# Test files can have more relaxed rules
+"tests/**/*.py" = [
+    "S101",   # Use of assert detected
+    "S105",   # Possible hardcoded password
+    "S106",   # Possible hardcoded password
+]
+
+# CLI can have print statements
+"src/ioctlance/cli.py" = [
+    "T201",   # Print found
+]
+
+[lint.mccabe]
+# Increase complexity threshold
+max-complexity = 20

@@ -1,0 +1,48 @@
+{
+    "basic": {
+        "path": "samples/RtDashPt.sys",
+        "DeviceName": [],
+        "time": {
+            "ioctl handler": 0,
+            "hunting vulns": 45
+        },
+        "memory": {
+            "ioctl handler": 20324,
+            "hunting vulns": 752804
+        },
+        "unique addr": {
+            "ioctl handler": 145,
+            "hunting vulns": 482
+        },
+        "ioctl handler": "0x140007080",
+        "IoControlCodes": [
+            "0x12c804",
+            "0x12c810",
+            "0x12c8c0",
+            "0x12c8c4",
+            "0x12c814",
+            "0x12c80c",
+            "0x12c800"
+        ]
+    },
+    "vuln": [
+        {
+            "title": "null pointer dereference - input buffer",
+            "description": "read input buffer",
+            "state": "<SimState @ 0x140007122>",
+            "eval": {
+                "IoControlCode": "0x12c8c0",
+                "SystemBuffer": "0x0",
+                "Type3InputBuffer": "0x0",
+                "UserBuffer": "0x0",
+                "InputBufferLength": "0x0",
+                "OutputBufferLength": "0x0"
+            },
+            "parameters": {},
+            "others": {
+                "read from": "<BV64 SystemBuffer_61_64 + 0x8>"
+            }
+        }
+    ],
+    "error": []
+}

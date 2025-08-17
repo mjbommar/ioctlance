@@ -1,4 +1,56 @@
-.vs
-x64
-Release
-__pycache__
+# Visual Studio
+.vs/
+x64/
+Release/
+Debug/
+*.vcxproj.user
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.coverage
+.pytest_cache/
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+old/
+tmp/
+dataset/
+*.log
+test_output.json
+analysis_results.json
+test.json
+*.json.bak
+
+# Don't ignore important JSON configs
+!pytest.ini
+!ruff.toml
+!pyproject.toml
+
+# Docker
+.dockerignore

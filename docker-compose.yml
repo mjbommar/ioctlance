@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  ioctlance-api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ioctlance-api
+    ports:
+      - "8080:8080"
+    volumes:
+      # Mount samples directory for testing
+      - ./samples:/app/samples:ro
+      # Persist uploaded files
+      - ioctlance-uploads:/app/uploads
+    environment:
+      - PYTHONUNBUFFERED=1
+      - UV_LINK_MODE=copy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  ioctlance-uploads:
+    driver: local

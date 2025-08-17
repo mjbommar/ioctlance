@@ -1,0 +1,81 @@
+{
+    "basic": {
+        "path": "Drivers/RTKVHD64_2.sys",
+        "DeviceName": [
+            "\\\\.\\%ws.dat",
+            "\\\\.\\SDBGMSGIOCTLtad.sw%"
+        ],
+        "time": {
+            "ioctl handler": 0,
+            "hunting vulns": 600
+        },
+        "memory": {
+            "ioctl handler": 24704,
+            "hunting vulns": 609508
+        },
+        "unique addr": {
+            "ioctl handler": 225,
+            "hunting vulns": 1094
+        },
+        "ioctl handler": "0x140590490",
+        "IoControlCodes": [
+            "0x2f0003",
+            "0x224418"
+        ]
+    },
+    "vuln": [
+        {
+            "title": "read/write controllable address",
+            "description": "read",
+            "state": "<SimState @ 0x140590603>",
+            "eval": {
+                "IoControlCode": "0x2f0003",
+                "SystemBuffer": "0x0",
+                "Type3InputBuffer": "0x0",
+                "UserBuffer": "0x0",
+                "InputBufferLength": "0x18",
+                "OutputBufferLength": "0x0"
+            },
+            "parameters": {},
+            "others": {
+                "read from": "<BV64 Type3InputBuffer_2159_64>"
+            }
+        }
+    ],
+    "error": [
+        "error on state [<SimState @ 0x1400b3791>]: kill",
+        "<State errored with \"No bytes in memory for block starting at 0x1fffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7fffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3ffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1e.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7fffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xfffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7ffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1a.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3fe.\">",
+        "<State errored with \"IR decoding error at 0x0b. You can hook this instruction with a python replacement using project.hook(0x0b, your_function, length=length_of_instruction).\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1ffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3fffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7ffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1fe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xfffffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xfe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7e.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3e.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xffffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1ffffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1fffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1ffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7ffffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3ffffffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0xfffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3fffffe.\">",
+        "<State errored with \"IR decoding error at 0x1a. You can hook this instruction with a python replacement using project.hook(0x1a, your_function, length=length_of_instruction).\">",
+        "<State errored with \"No bytes in memory for block starting at 0x3ffe.\">",
+        "<State errored with \"No bytes in memory for block starting at 0x7fe.\">",
+        "<State errored with \"IR decoding error at 0x1a. You can hook this instruction with a python replacement using project.hook(0x1a, your_function, length=length_of_instruction).\">",
+        "<State errored with \"No bytes in memory for block starting at 0x1fffe.\">"
+    ]
+}

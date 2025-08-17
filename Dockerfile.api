@@ -1,0 +1,46 @@
+FROM ubuntu:24.04
+
+# Basic setup
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install Python and essential tools
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
+    python3-pip \
+    python3-venv \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Install uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:$PATH"
+
+# Copy project files
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
+COPY samples/ ./samples/
+COPY tests/ ./tests/
+COPY README.md ./
+
+# Install Python dependencies (including FastAPI)
+RUN uv sync --frozen
+
+# Create directory for uploaded files
+RUN mkdir -p /app/uploads
+
+# Expose port for FastAPI
+EXPOSE 8080
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Default to running the API server
+# Can be overridden with docker run command to use CLI
+CMD ["uv", "run", "uvicorn", "ioctlance.api.app:app", "--host", "0.0.0.0", "--port", "8080"]

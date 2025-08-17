@@ -1,0 +1,264 @@
+{
+  "basic": {
+    "path": "samples/ilp60x64_3.sys",
+    "DeviceName": [
+      "\\_",
+      "\\3",
+      "\\H",
+      "\\fD9",
+      "\\sandbox",
+      "\\464524",
+      "\\lldpprot",
+      "\\objfre_win7_amd64",
+      "\\amd64",
+      "\\ilp60x64",
+      "\\K",
+      "\\02",
+      "\\y9",
+      "\\x",
+      "\\\\b",
+      "\\b",
+      "\\R",
+      "\\bxV6"
+    ],
+    "time": {
+      "ioctl handler": 2,
+      "hunting vulns": 48
+    },
+    "memory": {
+      "ioctl handler": 39612,
+      "hunting vulns": 1154100
+    },
+    "unique_addr": {
+      "ioctl handler": 985,
+      "hunting vulns": 985
+    },
+    "ioctl_handler": "0x11540",
+    "IoControlCodes": [
+      "0x12c800",
+      "0x12c804",
+      "0x12c808",
+      "0x12c810",
+      "0x12c814",
+      "0x12c818",
+      "0x12c81c",
+      "0x12c820",
+      "0x12c824"
+    ]
+  },
+  "vuln": [
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x11e2a>",
+      "eval": {
+        "IoControlCode": "0x12c814",
+        "SystemBuffer": "0x50020000",
+        "InputBufferLength": "0x10",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x11fe5>",
+      "eval": {
+        "IoControlCode": "0x12c814",
+        "SystemBuffer": "0x50020000",
+        "InputBufferLength": "0x10",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x11fe5>",
+      "eval": {
+        "IoControlCode": "0x12c814",
+        "SystemBuffer": "0x50020000",
+        "InputBufferLength": "0x10",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x136b8>",
+      "eval": {
+        "IoControlCode": "0x12c818",
+        "SystemBuffer": "0x500a0000",
+        "InputBufferLength": "<BV32 InputBufferLength_52_32>",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x136dd>",
+      "eval": {
+        "IoControlCode": "0x12c818",
+        "SystemBuffer": "0x500a0000",
+        "InputBufferLength": "<BV32 InputBufferLength_52_32>",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13731>",
+      "eval": {
+        "IoControlCode": "0x12c818",
+        "SystemBuffer": "0x500a0000",
+        "InputBufferLength": "<BV32 InputBufferLength_52_32>",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x136dd>",
+      "eval": {
+        "IoControlCode": "0x12c818",
+        "SystemBuffer": "0x500a0000",
+        "InputBufferLength": "<BV32 InputBufferLength_52_32>",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13731>",
+      "eval": {
+        "IoControlCode": "0x12c818",
+        "SystemBuffer": "0x500a0000",
+        "InputBufferLength": "<BV32 InputBufferLength_52_32>",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x135fd>",
+      "eval": {
+        "IoControlCode": "0x12c824",
+        "SystemBuffer": "0x50210000",
+        "InputBufferLength": "0x28",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x1361b>",
+      "eval": {
+        "IoControlCode": "0x12c824",
+        "SystemBuffer": "0x50210000",
+        "InputBufferLength": "0x28",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x1361b>",
+      "eval": {
+        "IoControlCode": "0x12c824",
+        "SystemBuffer": "0x50210000",
+        "InputBufferLength": "0x28",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13527>",
+      "eval": {
+        "IoControlCode": "0x12c820",
+        "SystemBuffer": "0x502c0000",
+        "InputBufferLength": "0x28",
+        "OutputBufferLength": "0x28"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13545>",
+      "eval": {
+        "IoControlCode": "0x12c820",
+        "SystemBuffer": "0x502c0000",
+        "InputBufferLength": "0x28",
+        "OutputBufferLength": "0x28"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13545>",
+      "eval": {
+        "IoControlCode": "0x12c820",
+        "SystemBuffer": "0x502c0000",
+        "InputBufferLength": "0x28",
+        "OutputBufferLength": "0x28"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13ee1>",
+      "eval": {
+        "IoControlCode": "0x12c81c",
+        "SystemBuffer": "0x503f0000",
+        "InputBufferLength": "0x20",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13f06>",
+      "eval": {
+        "IoControlCode": "0x12c81c",
+        "SystemBuffer": "0x503f0000",
+        "InputBufferLength": "0x20",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x13f06>",
+      "eval": {
+        "IoControlCode": "0x12c81c",
+        "SystemBuffer": "0x503f0000",
+        "InputBufferLength": "0x20",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x1194e>",
+      "eval": {
+        "IoControlCode": "0x12c810",
+        "SystemBuffer": "0x50cc0000",
+        "InputBufferLength": "0x30",
+        "OutputBufferLength": "0x30"
+      }
+    },
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x1185f>",
+      "eval": {
+        "IoControlCode": "0x12c808",
+        "SystemBuffer": "0x50cf0000",
+        "InputBufferLength": "0x10",
+        "OutputBufferLength": "<BV32 OutputBufferLength_51_32>"
+      }
+    }
+  ],
+  "error": [
+    "Errored state: <State errored with \"sized arguments to If must have the same length\">",
+    "Errored state: <State errored with \"sized arguments to If must have the same length\">"
+  ]
+}
