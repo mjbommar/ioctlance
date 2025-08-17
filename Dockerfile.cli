@@ -31,5 +31,8 @@ COPY README.md ./
 # Install Python dependencies
 RUN uv sync --frozen
 
-# Run IOCTLance
-CMD ["uv", "run", "python", "-m", "ioctlance.cli", "--help"]
+# Set the entrypoint to IOCTLance CLI
+ENTRYPOINT ["uv", "run", "python", "-m", "ioctlance.cli"]
+
+# Default command shows help if no args provided
+CMD ["--help"]

@@ -480,9 +480,9 @@ repos:
    - Test the original to see what it actually does
    - Only then start refactoring
 
-## Current Implementation Status (LATEST UPDATE)
+## Available Vulnerability Detectors
 
-### ✅ Completed Detectors
+IOCTLance includes the following vulnerability detectors:
 - **ArbitraryRWDetector** - Arbitrary read/write operations
 - **DoubleFreeDetector** - Double free vulnerabilities  
 - **FileOperationDetector** - Dangerous file operations (ZwCreateFile/ZwOpenFile)
@@ -495,74 +495,72 @@ repos:
 - **ShellcodeExecutionDetector** - Arbitrary shellcode execution
 - **StackBufferOverflowDetector** - Stack buffer overflow
 
-### ✅ Additional Detectors Implemented  
 - **RaceConditionDetector** - Double-fetch/TOCTOU vulnerabilities
 - **UseAfterFreeDetector** - Use-after-free with heap tracking
 
-### Test Drivers Created
-- `test_drivers/test_file_operations.c` - Tests FileOperationDetector
-- `test_drivers/test_physical_memory.c` - Tests PhysicalMemoryDetector  
-- `test_drivers/test_process_termination.c` - Tests ProcessTerminationDetector
-- `test_drivers/test_race_condition.c` - Tests RaceConditionDetector
-- `test_drivers/test_use_after_free.c` - Tests UseAfterFreeDetector
+## Creating Test Drivers
 
-### Build All Test Drivers Script
+Test drivers can be created to validate detector functionality:
+
 ```bash
-./build_all_drivers.sh
+# Example: Compile a test driver with MinGW
+x86_64-w64-mingw32-gcc -shared -nostdlib -fno-builtin \
+    -I/usr/share/mingw-w64/include/ddk \
+    -o test_driver.sys test_driver.c \
+    -Wl,--subsystem,native -Wl,--entry,DriverEntry
+
+# Test with IOCTLance
+uv run python -m ioctlance.cli test_driver.sys
 ```
 
-### ✅ P1 CLI Features Implemented
-1. ✅ Directory scanning for batch .sys file processing - **DONE**
+Test driver examples are provided in `test_drivers/` directory.
 
-### P1 CLI Features Still Pending
-2. Granular timeouts (--total-timeout and --ioctl-timeout)
-3. Function exclusion mechanism (--exclude ADDRESS,ADDRESS)
-4. Overwrite control for re-analysis (--overwrite flag)
-5. Recursion detection control flag (--recursion)
 
-## Recent Session Accomplishments
+## Performance Optimizations
 
-### Performance Optimizations ✅
-- Added LRU caching to frequently called functions
-- Pre-compiled regex patterns for 25-35% speed improvement
-- Optimized tainted buffer checks with frozenset
-- Added objdump output caching
+The refactored version includes several performance improvements:
 
-### Repository Cleanup ✅
-- Removed 113MB of unnecessary files (tmp/ directory)
-- Consolidated all binaries in samples/ directory
-- Moved old Visual Studio projects to old/
-- Created working Dockerfile.simple
+- **LRU caching** for frequently called functions
+- **Pre-compiled regex patterns** for 25-35% speed improvement
+- **Optimized data structures** using frozenset for tainted buffer checks
+- **Lazy loading** of modules and dependencies
+- **Parallel processing** support for batch analysis
 
-### Testing Improvements ✅
-- **Replaced ALL mocked tests with real driver tests**
-- Created comprehensive integration tests
-- Added detector-specific tests for UAF, race conditions, file ops
-- Test coverage increased from 22% to 48%
-- Verified detection of physical memory, process termination, buffer overflow vulnerabilities
-- **Created dataset benchmark suite** - Tests against 104 real vulnerable drivers in dataset/ folder
-  - `tests/integration/test_dataset_benchmark.py` - Full dataset analysis
-  - Generates detailed vulnerability reports and statistics
-  - Validates detection rates against known vulnerable drivers (RTCore64, dbutil_2_3, etc.)
-  - Performance metrics tracking (avg/min/max analysis times)
-- Added pytest markers for slow/benchmark tests
-- Created `run_benchmark.sh` script for full dataset analysis
+## Code Quality Standards
 
-### Documentation ✅
-- Enhanced README with refactoring details
-- Added testing philosophy section
-- Documented no-mocking policy
-- Added Docker simplified instructions
+### Linting Configuration
 
-### Code Quality ✅
-- All tests pass with real drivers
-- No more MagicMock usage
-- Integration tests verify actual vulnerability detection
-- **Configured ruff linting** with pragmatic rules:
-  - Ignores E501 (line length) - sometimes long lines are clearer
-  - Ignores E722 (bare except) - needed for broad error catching
-  - Ignores C901 (complexity) - some functions are necessarily complex
-  - Ignores security warnings - we're careful with subprocess usage
-  - **Shows type annotation warnings** (ANN*) - as reminders to add types
-  - **Shows naming convention warnings** (N*) - as reminders to standardize
-  - Configuration in both `pyproject.toml` and `ruff.toml`
+The project uses `ruff` with pragmatic rules configured in `pyproject.toml`:
+
+- Line length set to 120 for better readability
+- Allows bare except clauses where necessary for robust error handling
+- Complexity warnings disabled for necessarily complex functions
+- Security warnings disabled (we're careful with subprocess usage)
+
+### Type Checking
+
+Type hints are enforced using `mypy` with strict settings:
+
+```bash
+# Check type hints
+uvx ty check src/ioctlance
+```
+
+## Development Guidelines
+
+### File Management
+- Prefer editing existing files over creating new ones
+- Only create files when absolutely necessary
+- Keep directory structure organized and consistent
+
+### Testing Requirements
+- All code must pass `uvx ruff check`
+- Type hints should pass `uvx ty check`
+- Tests must pass with `uv run pytest`
+- Maintain test coverage above 40%
+
+### Documentation
+- Keep documentation accurate and up-to-date
+- Document complex algorithms and detection logic
+- Include examples for new features
+- Update README.md for user-facing changes

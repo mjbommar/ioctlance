@@ -338,7 +338,8 @@ async def get_analysis_result(job_id: str, format: str = Query("json", enum=["js
 
         return StreamingResponse(generate(), media_type="application/json")
     else:
-        return JSONResponse(content=job.result.model_dump())
+        # Use model_dump with mode='json' for proper datetime serialization
+        return JSONResponse(content=job.result.model_dump(mode='json'))
 
 
 @app.post("/batch", tags=["Analysis"])

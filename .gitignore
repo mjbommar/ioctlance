@@ -46,6 +46,8 @@ test_output.json
 analysis_results.json
 test.json
 *.json.bak
+benchmark_results/
+debug_*.sh
 
 # Don't ignore important JSON configs
 !pytest.ini
