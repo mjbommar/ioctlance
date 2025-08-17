@@ -93,4 +93,4 @@ While this is a complete rewrite, the tool maintains:
 
 ## License
 
-MIT License (same as original)
+GPLv3 License (same as original)
