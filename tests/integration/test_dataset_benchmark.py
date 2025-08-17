@@ -36,7 +36,7 @@ class TestDatasetBenchmark:
     @pytest.fixture(scope="class")
     def dataset_dir(self):
         """Get the dataset directory path."""
-        return Path(__file__).parent.parent.parent / "dataset"
+        return Path(__file__).parent.parent / "dataset"
 
     @pytest.fixture(scope="class")
     def output_dir(self, tmp_path_factory):

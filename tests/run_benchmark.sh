@@ -6,7 +6,7 @@ echo "=========================================="
 echo "IOCTLance Dataset Benchmark Test Suite"
 echo "=========================================="
 echo ""
-echo "This will analyze all drivers in the dataset/ folder."
+echo "This will analyze all drivers in the tests/dataset/ folder."
 echo "Expected runtime: 30-60 minutes for full dataset"
 echo ""
 

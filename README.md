@@ -261,7 +261,7 @@ ws.onmessage = (event) => {
 
 ⚠️ **The API currently has no authentication**. For production use, implement proper authentication and run behind a reverse proxy with TLS.
 
-For complete API documentation, see [API_README.md](API_README.md) or visit `/docs` when the API is running.
+For complete API documentation, see [API_README.md](docs/API_README.md) or visit `/docs` when the API is running.
 
 ## 🏗️ Architecture
 

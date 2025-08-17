@@ -40,7 +40,6 @@ Thumbs.db
 # Project specific
 old/
 tmp/
-dataset/
 *.log
 test_output.json
 analysis_results.json
