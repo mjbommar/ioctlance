@@ -11,6 +11,16 @@ logging.basicConfig(format="[%(levelname)s] %(message)s", level=logging.INFO)
 
 logger = logging.getLogger(__name__)
 
+# Suppress noisy third-party loggers by default
+logging.getLogger('angr').setLevel(logging.WARNING)
+logging.getLogger('angr.sim_manager').setLevel(logging.ERROR)
+logging.getLogger('angr.exploration_techniques').setLevel(logging.ERROR)
+logging.getLogger('angr.exploration_techniques.suggestions').setLevel(logging.ERROR)
+logging.getLogger('cle').setLevel(logging.ERROR)  # Suppress symbol not found errors
+logging.getLogger('cle.loader').setLevel(logging.ERROR)
+logging.getLogger('cle.backends.pe').setLevel(logging.ERROR)
+logging.getLogger('pyvex').setLevel(logging.WARNING)
+
 
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser for IOCTLance.
@@ -81,14 +91,25 @@ def main(argv: list[str] | None = None) -> int:
     # Set logging level
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
+        # Enable debug for third-party libraries too
+        logging.getLogger('angr').setLevel(logging.DEBUG)
+        logging.getLogger('cle').setLevel(logging.DEBUG)
     elif args.verbose:
         logging.getLogger().setLevel(logging.INFO)
+        # Keep third-party libraries at WARNING
+        logging.getLogger('angr').setLevel(logging.WARNING)
+        logging.getLogger('angr.sim_manager').setLevel(logging.ERROR)
     elif args.json:
         # In JSON mode, suppress most logs but keep ERROR and WARNING
         logging.getLogger().setLevel(logging.WARNING)
+        logging.getLogger('angr').setLevel(logging.ERROR)
+        logging.getLogger('cle').setLevel(logging.ERROR)
     else:
-        # Default: show INFO level for progress tracking
+        # Default: show INFO level for our code, suppress third-party noise
         logging.getLogger().setLevel(logging.INFO)
+        logging.getLogger('angr').setLevel(logging.WARNING)
+        logging.getLogger('angr.sim_manager').setLevel(logging.ERROR)
+        logging.getLogger('cle').setLevel(logging.WARNING)
 
     # Validate driver path
     driver_path = Path(args.driver)
@@ -135,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
                 "global_var_size": args.global_var_size,
                 "complete_mode": args.complete,
                 "debug": args.debug,
+                "verbose": args.verbose,
             }
 
             if args.bound:
@@ -158,13 +180,18 @@ def main(argv: list[str] | None = None) -> int:
                 if result.basic.IoControlCodes:
                     logger.info(f"Found {len(result.basic.IoControlCodes)} IOCTL codes")
 
-                # Vulnerabilities
-                if result.vuln:
-                    logger.warning(f"Found {len(result.vuln)} vulnerabilities!")
-                    for i, vuln in enumerate(result.vuln, 1):
-                        logger.warning(f"  {i}. {vuln.title}: {vuln.description}")
-                else:
-                    logger.info("No vulnerabilities detected")
+                # Print vulnerability summary instead of individual messages
+                context.print_vulnerability_summary()
+                
+                # Fallback if no summary was printed
+                if not context.vuln_buffer:
+                    if result.vuln:
+                        logger.warning(f"Found {len(result.vuln)} vulnerabilities!")
+                        if args.verbose:
+                            for i, vuln in enumerate(result.vuln, 1):
+                                logger.warning(f"  {i}. {vuln.title}: {vuln.description}")
+                    else:
+                        logger.info("No vulnerabilities detected")
 
                 # Errors
                 if result.error and args.debug:

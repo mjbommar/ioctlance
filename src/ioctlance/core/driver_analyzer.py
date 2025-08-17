@@ -39,14 +39,14 @@ class DriverAnalyzer:
         # Find driver type
         self.context.driver_type = find_driver_type(self.context.project)
         if self.context.driver_type != "wdm":
-            self.context.print_info(f"Driver type {self.context.driver_type} not supported (only WDM)")
+            logger.warning(f"Driver type {self.context.driver_type} not supported (only WDM)")
             return self._create_empty_result()
 
         # Find device names
         self.context.device_names = find_device_names(self.context.driver_path)
 
         # Phase 0: Scan and hook dangerous CPU instructions
-        self.context.print_info("Phase 0: Scanning for dangerous CPU instructions...")
+        logger.info("Phase 0: Scanning for dangerous CPU instructions...")
         from .opcode_scanner import scan_and_hook_opcodes
 
         # Store context in project globals so hooks can access it
@@ -57,10 +57,10 @@ class DriverAnalyzer:
         opcode_hooks = scan_and_hook_opcodes(self.context)
         if opcode_hooks:
             total_hooks = sum(len(addrs) for addrs in opcode_hooks.values())
-            self.context.print_info(f"Installed {total_hooks} instruction hooks")
+            logger.debug(f"Installed {total_hooks} instruction hooks")
 
         # Phase 1: Find IOCTL handler
-        self.context.print_info("Phase 1: Finding IOCTL handler...")
+        logger.info("Phase 1: Finding IOCTL handler...")
         handler_start_time = time.time()
         handler_start_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
@@ -70,13 +70,13 @@ class DriverAnalyzer:
         handler_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - handler_start_memory
 
         if not ioctl_handler:
-            self.context.print_error("IOCTL handler not found")
+            logger.error("IOCTL handler not found")
             return self._create_empty_result()
 
-        self.context.print_info(f"IOCTL handler found at: {ioctl_handler.address}")
+        logger.info(f"IOCTL handler found at: {ioctl_handler.address}")
 
         # Phase 2: Hunt vulnerabilities
-        self.context.print_info("Phase 2: Hunting vulnerabilities...")
+        logger.info("Phase 2: Hunting vulnerabilities...")
         hunt_start_time = time.time()
         hunt_start_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
@@ -84,7 +84,7 @@ class DriverAnalyzer:
 
         # Use handler state or blank state
         if not handler_state:
-            self.context.print_info("Using blank state for vulnerability hunting")
+            logger.debug("Using blank state for vulnerability hunting")
             import angr
 
             handler_state = self.context.project.factory.blank_state(add_options=angr.options.resilience)
@@ -102,7 +102,7 @@ class DriverAnalyzer:
             ioctl_handler.ioctl_codes = self.context.ioctl_codes.copy()
 
         # Log discovered IOCTLs
-        self.context.print_info(f"Discovered {len(ioctl_handler.ioctl_codes)} IOCTL codes: {ioctl_handler.ioctl_codes}")
+        logger.info(f"Discovered {len(ioctl_handler.ioctl_codes)} IOCTL codes: {ioctl_handler.ioctl_codes}")
 
         # Create result
         basic_info = BasicInfo(

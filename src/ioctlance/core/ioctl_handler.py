@@ -153,8 +153,9 @@ class IOCTLHandlerFinder:
         # Update our local tracking
         if self.context.ioctl_handler:
             self.ioctl_handler_addr = self.context.ioctl_handler
-            logger.info(f"Found IOCTL handler at: 0x{self.ioctl_handler_addr:x}")
-            self.context.print_info(f"[PHASE 1] Found IOCTL handler at: 0x{self.ioctl_handler_addr:x}")
+            logger.debug(f"Found IOCTL handler at: 0x{self.ioctl_handler_addr:x}")
+            if self.context.config.verbose:
+                self.context.print_info(f"[PHASE 1] Found IOCTL handler at: 0x{self.ioctl_handler_addr:x}")
 
     def _on_driver_startio_write(self, state: SimState) -> None:
         """Callback when DriverStartIo is written to driver object.
@@ -209,6 +210,8 @@ class IOCTLHandlerFinder:
 
         # Create simulation manager
         simgr = self.project.factory.simgr(initial_state)
+        # Remove suggestion technique to reduce verbose output
+        simgr._techniques = [t for t in simgr._techniques if not isinstance(t, angr.exploration_techniques.Suggestions)]
         simgr.use_technique(angr.exploration_techniques.DFS())
 
         # Add LoopSeer to detect and handle loops if configured
@@ -294,7 +297,7 @@ class IOCTLHandlerFinder:
 
         # Log completion
         elapsed = time.time() - start_time
-        self.context.print_info(
+        logger.info(
             f"[PHASE 1] Complete after {step_count} steps, {elapsed:.1f}s. "
             f"Found={len(simgr.found)}, Handler={self.ioctl_handler_addr is not None}"
         )
@@ -309,7 +312,7 @@ class IOCTLHandlerFinder:
             # Return the first found state that has the handler
             return handler, simgr.found[0]
 
-        self.context.print_error("[PHASE 1] FAILED: No IOCTL handler found")
+        logger.warning("[PHASE 1] FAILED: No IOCTL handler found")
         return None, None
 
     def discover_ioctl_codes(self, handler: IOCTLHandler, state: SimState | None = None) -> list[str]:

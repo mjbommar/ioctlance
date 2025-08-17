@@ -105,7 +105,7 @@ class HookObOpenObjectByPointer(BaseHook):
                     },
                 }
                 context.add_vulnerability(vuln)
-                context.print_info(f"[VULN] ObOpenObjectByPointer with tainted Object pointer - {exploitation}")
+                logger.debug(f"[VULN] ObOpenObjectByPointer with tainted Object pointer - {exploitation}")
 
         return 0  # STATUS_SUCCESS
 

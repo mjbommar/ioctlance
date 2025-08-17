@@ -22,6 +22,7 @@ class AnalysisConfig:
     global_var_size: int = 0  # Bytes of .data section to symbolize
     complete_mode: bool = False
     debug: bool = False
+    verbose: bool = False  # Verbose output mode
     recursion_kill: bool = True
 
     # Specific IOCTL to analyze (hex string like "0x22201c")
@@ -61,6 +62,7 @@ class AnalysisContext:
     # Vulnerability tracking
     vulnerabilities: list[dict[str, Any]] = field(default_factory=list)
     error_messages: list[str] = field(default_factory=list)
+    vuln_buffer: list[str] = field(default_factory=list)  # Buffer for reduced output
 
     # Symbolic execution state
     simulation_manager: Any | None = None  # angr.SimulationManager
@@ -152,6 +154,9 @@ class AnalysisContext:
             vuln_info: Vulnerability information dictionary
         """
         self.vulnerabilities.append(vuln_info)
+        # Buffer the vulnerability title for summary
+        if 'title' in vuln_info:
+            self.vuln_buffer.append(vuln_info['title'])
 
     def add_error(self, error_msg: str) -> None:
         """Add an error message.
@@ -182,7 +187,10 @@ class AnalysisContext:
         import logging
 
         logger = logging.getLogger(__name__)
-        logger.info(msg)
+        if self.config.verbose:
+            logger.info(msg)
+        else:
+            logger.debug(msg)
 
     def print_error(self, msg: str) -> None:
         """Print error message and record it.
@@ -195,3 +203,15 @@ class AnalysisContext:
         logger = logging.getLogger(__name__)
         logger.error(msg)
         self.add_error(msg)
+
+    def print_vulnerability_summary(self) -> None:
+        """Print a summary of found vulnerabilities."""
+        if self.vuln_buffer:
+            unique_vulns = list(set(self.vuln_buffer))
+            print(f"\n[SUMMARY] Found {len(self.vulnerabilities)} vulnerabilities:")
+            for vuln_type in unique_vulns:
+                count = self.vuln_buffer.count(vuln_type)
+                if count > 1:
+                    print(f"  - {vuln_type} ({count} instances)")
+                else:
+                    print(f"  - {vuln_type}")

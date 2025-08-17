@@ -1,9 +1,12 @@
 """Breakpoint handlers for vulnerability detection during symbolic execution."""
 
+import logging
 from typing import Any, cast
 
 import claripy
 from angr import SimState
+
+logger = logging.getLogger(__name__)
 
 from ..core.analysis_context import AnalysisContext
 from ..utils.helpers import get_state_globals
@@ -38,7 +41,7 @@ def b_mem_write_DriverStartIo(state: SimState, context: AnalysisContext) -> None
     """
     driver_startio_addr = state.solver.eval(state.inspect.mem_write_expr)
     # Store in context if we add a DriverStartIo field
-    context.print_info(f"DriverStartIo: {hex(int(driver_startio_addr))}")
+    logger.debug(f"DriverStartIo: {hex(int(driver_startio_addr))}")
 
 
 def b_mem_read(state: SimState, context: AnalysisContext) -> None:
@@ -65,7 +68,7 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
                 vuln_info = detector.check_state(state, "mem_read", address=state.inspect.mem_read_address)
                 if vuln_info:
                     context.add_vulnerability(vuln_info)
-                    context.print_info(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
+                    logger.debug(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
                     return  # Stop after first detection to avoid duplicates
 
     # Check each target buffer for vulnerabilities
@@ -186,7 +189,7 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
                 )
                 if vuln_info:
                     context.add_vulnerability(vuln_info)
-                    context.print_info(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
+                    logger.debug(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
                     return  # Stop after first detection to avoid duplicates
 
     # Check each target buffer
@@ -321,7 +324,7 @@ def b_call(state: SimState, context: AnalysisContext) -> None:
                     else:
                         state.regs.ip = 0x1337
                     context.add_vulnerability(vuln_info)
-                    context.print_info(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
+                    logger.debug(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
                     return  # Stop after first detection
 
     # Check if the function address to call is tainted (arbitrary shellcode execution)
@@ -459,7 +462,7 @@ def _record_vulnerability(
     }
 
     context.add_vulnerability(vuln_info)
-    context.print_info(f"[VULN] {title}: {description}")
+    logger.debug(f"[VULN] {title}: {description}")
 
 
 def b_vex_expr(state: SimState, context: AnalysisContext) -> None:

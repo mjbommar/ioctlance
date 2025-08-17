@@ -25,8 +25,9 @@ class MemcpyHook(angr.SimProcedure):
         # Get the analysis context from state globals
         context = self.state.globals.get("analysis_context")
 
+        # Only log in debug mode to reduce overhead
         if context and context.config.debug:
-            logger.info(f"memcpy hook: dst={dst}, src={src}, size={size}")
+            logger.debug(f"memcpy hook: dst={dst}, src={src}, size={size}")
 
         # FIRST: Check for controllable addresses (arbitrary read/write)
         # This is different from buffer overflow - it's about WHERE, not HOW MUCH
@@ -67,7 +68,8 @@ class MemcpyHook(angr.SimProcedure):
             }
 
             context.add_vulnerability(vuln_info)
-            context.print_info(
+            # Log at debug level, vulnerability is already tracked
+            logger.debug(
                 f"[VULN] {'Dest' if dst_tainted else 'Src'} controllable in memcpy - "
                 f"{'Arbitrary write' if dst_tainted else 'Arbitrary read'} primitive"
             )
@@ -88,9 +90,9 @@ class MemcpyHook(angr.SimProcedure):
                     max_size = 0x10000
                 concrete_size = max_size
 
-                # Log potential overflow
+                # Log potential overflow at debug level
                 if context and context.config.debug:
-                    logger.warning(f"memcpy with symbolic size (max={max_size})")
+                    logger.debug(f"memcpy with symbolic size (max={max_size})")
             else:
                 concrete_size = self.state.solver.eval_one(size)
         except:
@@ -143,7 +145,7 @@ class MemcpyHook(angr.SimProcedure):
                             },
                         }
                         context.add_vulnerability(vuln_info)
-                        context.print_info(f"[VULN] Stack overflow in memcpy: size={size}")
+                        logger.debug(f"[VULN] Stack overflow in memcpy: size={size}")
 
                 except Exception as e:
                     if context and context.config.debug:
@@ -197,7 +199,7 @@ def register_hooks(project: angr.Project) -> None:
     Args:
         project: angr project to hook
     """
-    logger.info("Registering memcpy hooks...")
+    logger.debug("Registering memcpy hooks...")
     hooked_addrs = set()
 
     # Hook various memory copy functions
@@ -212,7 +214,7 @@ def register_hooks(project: angr.Project) -> None:
                 project.hook(hook_addr, MemmoveHook(), replace=True)
             else:
                 project.hook(hook_addr, MemcpyHook(), replace=True)
-            logger.info(f"Hooked {func_name} at {hex(hook_addr)}")
+            logger.debug(f"Hooked {func_name} at {hex(hook_addr)}")
             hooked_addrs.add(hook_addr)
 
     # Also hook by common import addresses if available
@@ -243,7 +245,7 @@ def register_hooks(project: angr.Project) -> None:
                             project.hook(hook_addr, MemmoveHook(), replace=True)
                         else:
                             project.hook(hook_addr, MemcpyHook(), replace=True)
-                        logger.info(f"Hooked import {imp_name} at {hex(hook_addr)}")
+                        logger.debug(f"Hooked import {imp_name} at {hex(hook_addr)}")
                         hooked_addrs.add(hook_addr)
 
             # For PE files, also look for PLT stubs (jump thunks)
@@ -258,7 +260,7 @@ def register_hooks(project: angr.Project) -> None:
                                 project.hook(plt_addr, MemmoveHook(), replace=True)
                             else:
                                 project.hook(plt_addr, MemcpyHook(), replace=True)
-                            logger.info(f"Hooked PLT {func_name} at {hex(plt_addr)}")
+                            logger.debug(f"Hooked PLT {func_name} at {hex(plt_addr)}")
                             hooked_addrs.add(plt_addr)
 
     except Exception as e:
