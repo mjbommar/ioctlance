@@ -154,6 +154,110 @@ x86_64-w64-mingw32-gcc -shared -nostdlib -fno-builtin \
 uv run python -m ioctlance.cli test_driver.sys
 ```
 
+## 📊 Enhanced JSON Output Format
+
+The refactored IOCTLance provides significantly enhanced JSON output with comprehensive vulnerability details and execution context. See [example output](docs/examples/ilp60x64_3_analysis.json) from analyzing a real driver.
+
+### New Output Fields
+
+The enhanced output format includes these additional fields beyond the original IOCTLance:
+
+#### Top-Level Fields
+- **`driver_info`**: Complete driver metadata including name, type, entry point, base address, size, and device names
+- **`ioctl_handler`**: Detailed handler information with address, supported IOCTL codes, and major function
+- **`analysis_time`**: Total analysis duration in seconds
+- **`analysis_date`**: ISO 8601 timestamp of when analysis was performed
+- **`ioctlance_version`**: Version of IOCTLance used for analysis
+
+#### Enhanced Vulnerability Data
+Each vulnerability now includes:
+- **`discovered_at`**: Precise timestamp when vulnerability was discovered
+- **`raw_data`**: Complete symbolic execution state at vulnerability point, containing:
+  - **`constraints`**: All SMT solver constraints and satisfiability status
+  - **`execution_trace`**: Basic blocks visited, instruction count, call depth, unique addresses
+  - **`registers`**: CPU register values and which are symbolic
+  - **`memory`**: Memory snapshots and symbolic memory regions
+  - **`symbolic_state`**: Symbolic variables, expressions, and taint sources
+  - **`call_stack`**: Return addresses, function names, and stack depth
+  - **`instruction_context`**: Vulnerable instruction address, bytes, and disassembly
+  - **`concrete_inputs`**: Actual input values that trigger the vulnerability
+  - **`state_globals`**: Device object, tainted handles, EPROCESS pointers, validation results
+
+### Example Output Structure
+
+```json
+{
+  "basic": {
+    "path": "samples/driver.sys",
+    "DeviceName": ["\\Device\\Example"],
+    "time": {"ioctl handler": 2, "hunting vulns": 103},
+    "memory": {"ioctl handler": 214940, "hunting vulns": 1196340},
+    "unique_addr": {"ioctl handler": 1080, "hunting vulns": 1080},
+    "ioctl_handler": "0x11540",
+    "IoControlCodes": ["0x12c804", "0x12c810", ...]
+  },
+  "vuln": [{
+    "title": "read/write controllable address",
+    "description": "read",
+    "state": "<SimState @ 0x1194e>",
+    "eval": {
+      "IoControlCode": "0x12c810",
+      "SystemBuffer": "0x50040000",
+      "Type3InputBuffer": "<BV64 Type3InputBuffer>",
+      "UserBuffer": "<BV64 UserBuffer>",
+      "InputBufferLength": "0x30",
+      "OutputBufferLength": "0x30"
+    },
+    "discovered_at": "2025-08-17T12:16:39.756407",
+    "raw_data": {
+      "constraints": {
+        "constraints": ["<Bool IoControlCode == 0x12c810>", ...],
+        "satisfiable": true
+      },
+      "execution_trace": {
+        "basic_blocks": [135268, 135272, ...],
+        "instructions_executed": 4521,
+        "call_depth": 3,
+        "unique_addresses": 1080
+      },
+      "concrete_inputs": {
+        "ioctl_code": 1231888,
+        "input_buffer_length": 48,
+        "output_buffer_length": 48,
+        "system_buffer_addr": 1342570496
+      }
+    }
+  }],
+  "error": [],
+  "driver_info": {
+    "path": "/path/to/driver.sys",
+    "name": "driver",
+    "type": "wdm",
+    "size": 65536
+  },
+  "ioctl_handler": {
+    "address": "0x11540",
+    "ioctl_codes": ["0x12c804", "0x12c810"],
+    "major_function": 14
+  },
+  "analysis_time": 105.3,
+  "analysis_date": "2025-08-17T12:16:39.756407",
+  "ioctlance_version": "0.2.0"
+}
+```
+
+### Benefits of Enhanced Output
+
+1. **Reproducibility**: Complete constraints and concrete inputs allow reproducing vulnerabilities
+2. **Debugging**: Execution trace and instruction context help understand vulnerability paths
+3. **Severity Assessment**: Additional context enables better vulnerability prioritization
+4. **Integration**: Structured data with timestamps facilitates integration with other tools
+5. **Forensics**: Raw state data preserves complete vulnerability context for analysis
+
+For a complete example, see:
+- [Full analysis output](docs/examples/ilp60x64_3_analysis.json) - Complete output from real driver analysis
+- [Truncated example](docs/examples/example_output_truncated.json) - Simplified version showing structure
+
 ## 🌐 REST API (Optional)
 
 IOCTLance includes an optional high-performance REST API built with FastAPI for programmatic access and integration with other tools. The API supports asynchronous processing, batch analysis, and real-time WebSocket notifications.

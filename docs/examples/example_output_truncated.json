@@ -1,0 +1,293 @@
+{
+  "basic": {
+    "path": "samples/ilp60x64_3.sys",
+    "DeviceName": [
+      "\\_",
+      "\\3",
+      "\\H",
+      "\\fD9",
+      "\\sandbox",
+      "\\464524",
+      "\\lldpprot",
+      "\\objfre_win7_amd64",
+      "\\amd64",
+      "\\ilp60x64",
+      "\\K",
+      "\\02",
+      "\\y9",
+      "\\x",
+      "\\\\b",
+      "\\b",
+      "\\R",
+      "\\bxV6"
+    ],
+    "time": {
+      "ioctl handler": 2,
+      "hunting vulns": 60
+    },
+    "memory": {
+      "ioctl handler": 212704,
+      "hunting vulns": 777160
+    },
+    "unique_addr": {
+      "ioctl handler": 865,
+      "hunting vulns": 865
+    },
+    "ioctl_handler": "0x11540",
+    "IoControlCodes": [
+      "0x12c804",
+      "0x12c810",
+      "0x12c814",
+      "0x12c824",
+      "0x12c820",
+      "0x12c81c"
+    ]
+  },
+  "vuln": [
+    {
+      "title": "read/write controllable address",
+      "description": "read",
+      "state": "<SimState @ 0x1194e>",
+      "eval": {
+        "IoControlCode": "0x12c810",
+        "SystemBuffer": "0x50040000",
+        "Type3InputBuffer": "<BV64 Type3InputBuffer_47_64>",
+        "UserBuffer": "<BV64 UserBuffer_48_64>",
+        "InputBufferLength": "0x30",
+        "OutputBufferLength": "0x30"
+      },
+      "parameters": {},
+      "others": {
+        "read from": "<BV64 *<BV64 SystemBuffer_46_64>_63_4096[63:0] + 0x10>"
+      },
+      "discovered_at": "2025-08-17T12:26:37.541663",
+      "raw_data": {
+        "constraints": {
+          "constraints": [
+            "<Bool !(.data_29_32768[2495:2432] == 0x0)>",
+            "<Bool .data_29_32768[2111:2048] == 0x2b992ddfa232>",
+            "<Bool unconstrained_ret_NdisRegisterProtocolDriver_42_64[31:0] == 0x0>",
+            "... truncated ..."
+          ],
+          "satisfiable": true
+        },
+        "execution_trace": {
+          "basic_blocks": [
+            135268,
+            135272,
+            135275,
+            135278,
+            135176,
+            "... truncated ..."
+          ],
+          "instructions_executed": 352,
+          "call_depth": 2,
+          "unique_addresses": 256
+        },
+        "registers": {
+          "registers": {
+            "rax": "0x7fffffffffeff88",
+            "rcx": "<BV64 SystemBuffer_46_64>",
+            "rdx": "<BV64 0x0 .. InputBufferLength_52_32>",
+            "rbx": "0x0",
+            "rsp": "0x7fffffffffeff00",
+            "rbp": "<BV64 reg_rbp_33_64>",
+            "rsi": "<BV64 reg_rsi_34_64>",
+            "rdi": "0x41410000",
+            "r8": "<BV64 0x0 .. OutputBufferLength_51_32>",
+            "r9": "0x7fffffffffeffc8",
+            "r10": "<BV64 reg_r10_64_64>",
+            "r11": "0x7fffffffffeffc0",
+            "r12": "<BV64 reg_r12_36_64>",
+            "r13": "<BV64 reg_r13_60_64>",
+            "r14": "<BV64 SystemBuffer_46_64>",
+            "r15": "<BV64 *<BV64 SystemBuffer_46_64>_63_4096[63:0]>",
+            "cc_op": "0x14",
+            "cc_dep1": "<BV64 *<BV64 SystemBuffer_46_64>_63_4096[63:0]>",
+            "cc_dep2": "0x0",
+            "cc_ndep": "0x0",
+            "d": "0x1",
+            "rip": "0x1194e",
+            "ac": "<BV64 reg_ac_65_64>",
+            "id": "<BV64 reg_id_66_64>",
+            "fs": "0x9000000000000000",
+            "sseround": "0x0",
+            "cr0": "<BV64 reg_cr0_67_64>",
+            "cr2": "<BV64 reg_cr2_68_64>",
+            "cr3": "<BV64 reg_cr3_69_64>",
+            "cr4": "<BV64 reg_cr4_70_64>",
+            "cr8": "<BV64 cr8_44_64>",
+            "ymm0": "<BV256 reg_ymm0hx_71_128 .. 0x1c8e0 .. mem_7fffffffffeff14_40_32 .. 0x140012>",
+            "ymm1": "<BV256 reg_ymm1_72_256>",
+            "ymm2": "<BV256 reg_ymm2_73_256>",
+            "ymm3": "<BV256 reg_ymm3_74_256>",
+            "ymm4": "<BV256 reg_ymm4_75_256>",
+            "ymm5": "<BV256 reg_ymm5_76_256>",
+            "ymm6": "<BV256 reg_ymm6_77_256>",
+            "ymm7": "<BV256 reg_ymm7_78_256>",
+            "ymm8": "<BV256 reg_ymm8_79_256>",
+            "ymm9": "<BV256 reg_ymm9_80_256>",
+            "ymm10": "<BV256 reg_ymm10_81_256>",
+            "ymm11": "<BV256 reg_ymm11_82_256>",
+            "ymm12": "<BV256 reg_ymm12_83_256>",
+            "ymm13": "<BV256 reg_ymm13_84_256>",
+            "ymm14": "<BV256 reg_ymm14_85_256>",
+            "ymm15": "<BV256 reg_ymm15_86_256>",
+            "ftop": "0x7",
+            "fpreg": "<BV512 reg_fpreg_87_512>",
+            "fptag": "0x0",
+            "fpround": "0x0",
+            "fc3210": "<BV64 reg_fc3210_88_64>",
+            "emnote": "<BV32 reg_emnote_89_32>",
+            "cmstart": "<BV64 reg_cmstart_90_64>",
+            "cmlen": "<BV64 reg_cmlen_91_64>",
+            "nraddr": "<BV64 reg_nraddr_92_64>",
+            "gs": "<BV64 reg_gs_93_64>",
+            "ip_at_syscall": "<BV64 reg_ip_at_syscall_94_64>",
+            "cs_seg": "<BV16 reg_cs_seg_95_16>",
+            "ds_seg": "<BV16 reg_ds_seg_96_16>",
+            "es_seg": "<BV16 reg_es_seg_97_16>",
+            "fs_seg": "<BV16 reg_fs_seg_98_16>",
+            "gs_seg": "<BV16 reg_gs_seg_99_16>",
+            "ss_seg": "<BV16 reg_ss_seg_100_16>"
+          },
+          "symbolic_registers": [
+            "rcx",
+            "rdx",
+            "rbp",
+            "rsi",
+            "r8",
+            "r10",
+            "r12",
+            "r13",
+            "r14",
+            "r15",
+            "cc_dep1",
+            "ac",
+            "id",
+            "cr0",
+            "cr2",
+            "cr3",
+            "cr4",
+            "cr8",
+            "ymm0",
+            "ymm1",
+            "ymm2",
+            "ymm3",
+            "ymm4",
+            "ymm5",
+            "ymm6",
+            "ymm7",
+            "ymm8",
+            "ymm9",
+            "ymm10",
+            "ymm11",
+            "ymm12",
+            "ymm13",
+            "ymm14",
+            "ymm15",
+            "fpreg",
+            "fc3210",
+            "emnote",
+            "cmstart",
+            "cmlen",
+            "nraddr",
+            "gs",
+            "ip_at_syscall",
+            "cs_seg",
+            "ds_seg",
+            "es_seg",
+            "fs_seg",
+            "gs_seg",
+            "ss_seg"
+          ]
+        },
+        "memory": {
+          "snapshots": {
+            "0x11000": "00000000000000004c8bdc49895b1049896b18565741544881ecf0000000bd12000000488bf14533e48d4502bb00010000488d0da8d100006689442442488d059cb8000033d24c8bc366896c2440418afc48894424484d896308e8d1b20000b888cc0000488d0d1dd10000488935aed00000668905e5d00000ff1531c00000488d05e2d00000488905e3d00000488905d4d00000488d0505d10000488d155eb80000488d4c24504c8925cad00000488905f3d00000488905e4d000004c8925edd00000ff15a7c000004c8d9c24100100004c8d4424504c895c2430448bcd33d2488bce4488642428895c2420ff1556c00000413bc48bd80f8c9b010000488d15"
+          },
+          "symbolic_regions": [
+            {
+              "name": "SystemBuffer",
+              "address": "0x50040000",
+              "expression": "<BV2048 *<BV64 SystemBuffer_46_64>_63_4096[7:0] .. *<BV64 SystemBuffer_46_64>_63_4096[15:8] .. *<BV64 SystemBuffer_46_64>_63_4096[23:16] .. *<BV64 SystemBuffer_46_64>_63_4096[31:24] .. *<BV64 SystemBu"
+            }
+          ]
+        },
+        "symbolic_state": {
+          "symbolic_vars": {},
+          "symbolic_expressions": {},
+          "taint_sources": []
+        },
+        "call_stack": {
+          "return_addresses": [
+            576460752303357920,
+            1310738,
+            116960,
+            25777668501,
+            1094778880,
+            71202
+          ],
+          "function_names": [],
+          "stack_depth": 6
+        },
+        "instruction_context": {
+          "address": 72014,
+          "bytes": "41817f10506c4469740e",
+          "disassembly": "0x1194e:\tcmp\tdword ptr [r15 + 0x10], 0x69446c50\n0x11956:\tje\t0x11966",
+          "basic_block_start": 72014
+        },
+        "concrete_inputs": {
+          "ioctl_code": 1230864,
+          "input_buffer": "0xffffffffffffffff0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+          "input_buffer_length": 48,
+          "output_buffer_length": 48,
+          "system_buffer_addr": 1342439424,
+          "type3_input_buffer_addr": 0,
+          "user_buffer_addr": 0,
+          "additional_inputs": {}
+        },
+        "state_globals": {
+          "device_object_addr": 1342177280,
+          "ioctl_handler": 70976,
+          "tainted_probe_read": [],
+          "tainted_probe_write": [],
+          "tainted_mmisvalid": [],
+          "tainted_handles": [],
+          "tainted_eprocess": [],
+          "custom_globals": {
+            "open_section_handles": "()",
+            "tainted_unicode_strings": "()",
+            "IoControlCode": 1230864,
+            "<BV64 SystemBuffer_46_64>": true
+          }
+        }
+      }
+    }
+  ],
+  "error": [],
+  "driver_info": {
+    "path": "samples/ilp60x64_3.sys",
+    "name": "ilp60x64_3",
+    "type": "unknown",
+    "entry_point": null,
+    "base_address": null,
+    "size": 74216,
+    "device_names": []
+  },
+  "ioctl_handler": {
+    "address": "0x11540",
+    "ioctl_codes": [
+      "0x12c804",
+      "0x12c810",
+      "0x12c814",
+      "0x12c824",
+      "0x12c820",
+      "0x12c81c"
+    ],
+    "major_function": 14
+  },
+  "analysis_time": 62.16301131248474,
+  "analysis_date": "2025-08-17T12:26:37.541789",
+  "ioctlance_version": "0.2.0"
+}
