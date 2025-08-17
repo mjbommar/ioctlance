@@ -39,8 +39,7 @@ This refactoring represents a ground-up rewrite of the original IOCTLance projec
    - Migrated from pip/virtualenv to UV package manager
    - Simplified Docker build with multi-stage optimization
    - Added FastAPI REST API with WebSocket support for real-time updates
-   - Configured ruff linting and mypy type checking
-   - Added GitHub Actions CI/CD support
+   - Configured ruff linting and ty type checking
 
 ### 7. **Enhanced CLI & API**
    - Improved CLI with batch processing and JSON output
@@ -62,9 +61,6 @@ This refactoring represents a ground-up rewrite of the original IOCTLance projec
 
 ### 10. **Dependency Updates**
    - Updated angr from 9.2.18 to 9.2.170
-   - Added Unicorn engine for unsupported VEX operations
-   - Integrated modern Python libraries (Pydantic, FastAPI, aiofiles)
-   - Maintained compatibility with latest Windows driver structures
 
 ## Key Statistics
 
