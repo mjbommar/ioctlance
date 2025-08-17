@@ -31,6 +31,7 @@ class ProcessTerminationDetector(VulnerabilityDetector):
         super().__init__(context)
         self.tainted_handles = set()  # Track tainted process handles
         self.tainted_pids = set()  # Track tainted PIDs
+        self.tainted_objects = set()  # Track tainted object pointers (from ObOpenObjectByPointer)
         self.detected_vulns = set()
 
     def detect(self, state: SimState) -> dict[str, Any] | None:

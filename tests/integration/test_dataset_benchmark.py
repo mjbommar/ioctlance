@@ -63,7 +63,7 @@ class TestDatasetBenchmark:
                     {
                         "title": v.title,
                         "description": v.description,
-                        "ioctl_code": v.eval.IoControlCode if hasattr(v, 'eval') else None,
+                        "ioctl_code": v.eval.IoControlCode if hasattr(v, "eval") else None,
                     }
                     for v in result.vuln
                 ],
@@ -71,7 +71,7 @@ class TestDatasetBenchmark:
                 "ioctl_handler": result.basic.ioctl_handler,
                 "ioctl_codes": list(result.basic.IoControlCodes) if result.basic.IoControlCodes else [],
                 "success": True,
-                "error": None
+                "error": None,
             }
 
         except Exception as e:
@@ -81,7 +81,7 @@ class TestDatasetBenchmark:
                 "vulnerabilities": [],
                 "vuln_count": 0,
                 "success": False,
-                "error": str(e)
+                "error": str(e),
             }
 
     @pytest.mark.skip(reason="Too slow for regular test runs - use run_benchmark.sh instead")
@@ -126,37 +126,44 @@ class TestDatasetBenchmark:
         print("BENCHMARK SUMMARY")
         print("=" * 80)
         print(f"Total drivers analyzed: {total_drivers}")
-        print(f"Successful: {successful} ({successful/total_drivers*100:.1f}%)")
-        print(f"Failed: {failed} ({failed/total_drivers*100:.1f}%)")
+        print(f"Successful: {successful} ({successful / total_drivers * 100:.1f}%)")
+        print(f"Failed: {failed} ({failed / total_drivers * 100:.1f}%)")
         print(f"Total vulnerabilities found: {total_vulns}")
-        print(f"Average vulnerabilities per driver: {total_vulns/successful if successful > 0 else 0:.2f}")
+        print(f"Average vulnerabilities per driver: {total_vulns / successful if successful > 0 else 0:.2f}")
 
         # Save detailed results to JSON
         report_path = output_dir / "benchmark_report.json"
         with open(report_path, "w") as f:
-            json.dump({
-                "summary": {
-                    "total_drivers": total_drivers,
-                    "successful": successful,
-                    "failed": failed,
-                    "total_vulnerabilities": total_vulns,
-                    "avg_vulns_per_driver": total_vulns/successful if successful > 0 else 0
+            json.dump(
+                {
+                    "summary": {
+                        "total_drivers": total_drivers,
+                        "successful": successful,
+                        "failed": failed,
+                        "total_vulnerabilities": total_vulns,
+                        "avg_vulns_per_driver": total_vulns / successful if successful > 0 else 0,
+                    },
+                    "results": results,
                 },
-                "results": results
-            }, f, indent=2)
+                f,
+                indent=2,
+            )
 
         print(f"\nDetailed report saved to: {report_path}")
 
         # Assertions - be more lenient since many drivers are complex/obfuscated
         assert successful > 0, "No drivers were successfully analyzed"
         # Lower success rate expectation due to complex/obfuscated drivers
-        assert successful / total_drivers >= 0.3, f"Less than 30% success rate: {successful/total_drivers*100:.1f}%"
+        assert successful / total_drivers >= 0.3, f"Less than 30% success rate: {successful / total_drivers * 100:.1f}%"
         assert total_vulns > 0, "No vulnerabilities found in entire dataset"
 
-    @pytest.mark.parametrize("driver_name,expected_patterns", [
-        ("RTCore64.sys", ["Physical Memory", "Arbitrary"]),
-        ("dbutil_2_3.sys", ["Physical Memory", "Arbitrary"]),
-    ])
+    @pytest.mark.parametrize(
+        "driver_name,expected_patterns",
+        [
+            ("RTCore64.sys", ["Physical Memory", "Arbitrary"]),
+            ("dbutil_2_3.sys", ["Physical Memory", "Arbitrary"]),
+        ],
+    )
     def test_known_vulnerable_drivers(self, dataset_dir, driver_name, expected_patterns):
         """Test specific known vulnerable drivers for expected vulnerability types."""
         driver_path = dataset_dir / driver_name
@@ -174,8 +181,9 @@ class TestDatasetBenchmark:
         vuln_text = " ".join(vuln_titles).lower()
 
         for pattern in expected_patterns:
-            assert pattern.lower() in vuln_text, \
+            assert pattern.lower() in vuln_text, (
                 f"Expected '{pattern}' vulnerability not found in {driver_name}. Found: {vuln_titles}"
+            )
 
     def test_performance_metrics(self, dataset_dir):
         """Test performance metrics on a subset of drivers."""
@@ -282,10 +290,9 @@ class TestDatasetStatistics:
         # Save statistics
         stats_path = output_dir / "vulnerability_statistics.json"
         with open(stats_path, "w") as f:
-            json.dump({
-                "vulnerability_types": vuln_type_counts,
-                "driver_vulnerabilities": driver_vuln_counts
-            }, f, indent=2)
+            json.dump(
+                {"vulnerability_types": vuln_type_counts, "driver_vulnerabilities": driver_vuln_counts}, f, indent=2
+            )
 
         print(f"\nStatistics saved to: {stats_path}")
 

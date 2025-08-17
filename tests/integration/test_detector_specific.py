@@ -30,7 +30,9 @@ class TestUseAfterFreeDetection:
 
         # Check for use-after-free or related vulnerabilities
         found_uaf = any(
-            "use" in title.lower() and "after" in title.lower() and "free" in title.lower()
+            "use" in title.lower()
+            and "after" in title.lower()
+            and "free" in title.lower()
             or "uaf" in title.lower()
             or "freed" in title.lower()
             for title in vuln_titles
@@ -46,8 +48,9 @@ class TestUseAfterFreeDetection:
                 for title in vuln_titles
             )
             # UAF is hard to detect symbolically, accept any vulnerability
-            assert len(result.vuln) > 0 or found_memory, \
+            assert len(result.vuln) > 0 or found_memory, (
                 f"Expected UAF or memory vulnerability not found. Found: {vuln_titles}"
+            )
 
 
 class TestRaceConditionDetection:
@@ -72,9 +75,11 @@ class TestRaceConditionDetection:
 
         found_race = any(
             "race" in title.lower()
-            or "double" in title.lower() and "fetch" in title.lower()
+            or "double" in title.lower()
+            and "fetch" in title.lower()
             or "toctou" in title.lower()
-            or "time" in title.lower() and "check" in title.lower()
+            or "time" in title.lower()
+            and "check" in title.lower()
             for title in vuln_titles
         )
 
@@ -116,15 +121,12 @@ class TestFileOperationsDetection:
 
         # Might be detected as generic tainted operation
         if not found_file_ops:
-            found_tainted = any(
-                "tainted" in title.lower()
-                or "controlled" in title.lower()
-                for title in vuln_titles
-            )
+            found_tainted = any("tainted" in title.lower() or "controlled" in title.lower() for title in vuln_titles)
             # File operations are also hard to detect in symbolic execution
             # Accept if any vulnerability was found
-            assert len(result.vuln) > 0 or found_tainted, \
+            assert len(result.vuln) > 0 or found_tainted, (
                 f"Expected file operation vulnerability not found. Found: {vuln_titles}"
+            )
 
 
 class TestDetectorPerformance:

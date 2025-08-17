@@ -447,7 +447,7 @@ def _record_vulnerability(
     except Exception as e:
         # Don't fail vulnerability recording if raw capture fails
         context.print_debug(f"Failed to capture raw state data: {e}")
-    
+
     vuln_info = {
         "title": title,
         "description": description,

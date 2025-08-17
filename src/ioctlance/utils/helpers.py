@@ -15,10 +15,10 @@ from ..core.analysis_context import AnalysisContext
 
 def get_state_globals(state: SimState) -> dict[str, Any]:
     """Get state globals as a dict for type checking compatibility.
-    
+
     Args:
         state: The simulation state
-        
+
     Returns:
         State globals as a dictionary-like object
     """
@@ -27,12 +27,12 @@ def get_state_globals(state: SimState) -> dict[str, Any]:
 
 def safe_hex(value: Any) -> str:
     """Safely convert a value to hex string.
-    
+
     Handles symbolic values, integers, and strings.
-    
+
     Args:
         value: Value to convert to hex
-        
+
     Returns:
         Hex string representation
     """
@@ -56,6 +56,7 @@ def safe_hex(value: Any) -> str:
             return hex(int(value))
     except (ValueError, TypeError, AttributeError):
         return "0x0"
+
 
 # Pre-defined set of tainted buffer names for fast lookup
 TAINTED_BUFFER_NAMES = frozenset(

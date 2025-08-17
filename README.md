@@ -29,16 +29,20 @@ confusion?).
 
 - **Memory Exploitation**
     - Physical memory mapping (MmMapIoSpace)
-    - Buffer overflow & stack corruption
+    - Buffer overflow & stack corruption (with RCE detection)
     - Use-after-free & double-free
     - Null pointer dereference
+    - **Arbitrary read/write via controllable memcpy** (src/dst address control)
 
-- **Access Control**
-    - Controllable process handles
+- **Access Control & Privilege Escalation**
+    - **ObOpenObjectByPointer abuse** (kernel privilege escalation)
+    - Controllable process handles & termination
     - Arbitrary read/write operations
     - ProbeForRead/Write bypass
+    - Token stealing primitives
 
 - **Code Execution**
+    - Buffer overflow with controllable PC (RCE)
     - Arbitrary shellcode execution
     - Dangerous MSR operations (wrmsr)
     - Arbitrary I/O port access
@@ -49,7 +53,14 @@ confusion?).
 
 ## 🔄 Recent Improvements (Refactored Version)
 
-This repository contains a significantly refactored version of IOCTLance with:
+This repository contains a significantly refactored version of IOCTLance with **full parity** with the original implementation plus substantial enhancements:
+
+### Complete Feature Parity + Enhancements
+
+- **All original detectors preserved** including ObOpenObjectByPointer and controllable memcpy
+- **6 additional detector types** beyond the original implementation
+- **Buffer overflow with RCE detection** - Detects when PC becomes controllable
+- **Enhanced vulnerability reporting** with detailed state information
 
 ### Architecture & Performance
 

@@ -51,11 +51,7 @@ class TestDriverAnalysis:
             pytest.skip(f"Sample driver not found: {driver_path}")
 
         # Target specific IOCTL code
-        config = AnalysisConfig(
-            timeout=20,
-            target_ioctl="0x22201c",
-            debug=False
-        )
+        config = AnalysisConfig(timeout=20, target_ioctl="0x22201c", debug=False)
         context = AnalysisContext.create_for_driver(driver_path, config)
 
         # Run analysis
@@ -66,10 +62,13 @@ class TestDriverAnalysis:
         assert result is not None
         assert result.basic.ioctl_handler != "0x0"
 
-    @pytest.mark.parametrize("driver_name", [
-        "RtDashPt.sys",
-        "ilp60x64_3.sys",
-    ])
+    @pytest.mark.parametrize(
+        "driver_name",
+        [
+            "RtDashPt.sys",
+            "ilp60x64_3.sys",
+        ],
+    )
     def test_analyze_multiple_drivers(self, samples_dir, driver_name):
         """Test analysis of multiple driver samples."""
         driver_path = samples_dir / driver_name

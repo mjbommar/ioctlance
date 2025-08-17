@@ -64,8 +64,11 @@ class IOCTLHandlerFinder:
         # Create initial state at DriverEntry with resilience options
         # to handle unsupported VEX operations like Iop_32Uto64
         state = self.project.factory.call_state(
-            self.project.entry, driver_object_addr, registry_path_addr, cc=self.calling_convention,
-            add_options=angr.options.resilience
+            self.project.entry,
+            driver_object_addr,
+            registry_path_addr,
+            cc=self.calling_convention,
+            add_options=angr.options.resilience,
         )
 
         # Initialize state globals
@@ -272,6 +275,7 @@ class IOCTLHandlerFinder:
 
             except Exception as e:
                 import traceback
+
                 # This specific error happens in angr when it tries to create a block at an invalid address
                 # It's non-fatal and angr recovers from it
                 if "unsupported operand type(s) for -: 'NoneType' and 'bool'" not in str(e):

@@ -31,8 +31,9 @@ class TestRealVulnerabilityDetection:
 
         # Should detect physical memory vulnerability
         vuln_titles = [v.title for v in result.vuln]
-        assert any("Physical Memory Mapping" in title for title in vuln_titles), \
+        assert any("Physical Memory Mapping" in title for title in vuln_titles), (
             f"Expected physical memory vulnerability not found. Found: {vuln_titles}"
+        )
 
     def test_detect_process_termination_vulnerability(self, samples_dir):
         """Test detection of arbitrary process termination vulnerability."""
@@ -49,8 +50,9 @@ class TestRealVulnerabilityDetection:
 
         # Should detect process termination vulnerability
         vuln_titles = [v.title for v in result.vuln]
-        assert any("Process Termination" in title for title in vuln_titles), \
+        assert any("Process Termination" in title for title in vuln_titles), (
             f"Expected process termination vulnerability not found. Found: {vuln_titles}"
+        )
 
     def test_rtdashpt_finds_vulnerabilities(self, samples_dir):
         """Test that RtDashPt.sys has expected vulnerabilities."""
@@ -72,8 +74,9 @@ class TestRealVulnerabilityDetection:
         vuln_titles = [v.title for v in result.vuln]
 
         # RtDashPt is known to have stack buffer overflow
-        assert any("buffer overflow" in title.lower() for title in vuln_titles), \
+        assert any("buffer overflow" in title.lower() for title in vuln_titles), (
             f"Expected buffer overflow not found. Found: {vuln_titles}"
+        )
 
     def test_detector_coverage(self, samples_dir):
         """Test that multiple detector types are working."""
@@ -112,14 +115,16 @@ class TestRealVulnerabilityDetection:
                     detected_types.add("tainted_object")
 
         # We should detect at least 3 different vulnerability types
-        assert len(detected_types) >= 3, \
-            f"Only detected {len(detected_types)} vulnerability types: {detected_types}"
+        assert len(detected_types) >= 3, f"Only detected {len(detected_types)} vulnerability types: {detected_types}"
 
-    @pytest.mark.parametrize("driver_file,min_vulns", [
-        ("test_physical_memory.sys", 1),
-        ("test_process_termination.sys", 1),
-        ("RtDashPt.sys", 1),
-    ])
+    @pytest.mark.parametrize(
+        "driver_file,min_vulns",
+        [
+            ("test_physical_memory.sys", 1),
+            ("test_process_termination.sys", 1),
+            ("RtDashPt.sys", 1),
+        ],
+    )
     def test_minimum_vulnerability_detection(self, samples_dir, driver_file, min_vulns):
         """Test that each driver has at least the minimum expected vulnerabilities."""
         driver_path = samples_dir / driver_file
@@ -133,5 +138,6 @@ class TestRealVulnerabilityDetection:
         analyzer = DriverAnalyzer(context)
         result = analyzer.analyze()
 
-        assert len(result.vuln) >= min_vulns, \
+        assert len(result.vuln) >= min_vulns, (
             f"{driver_file}: Expected at least {min_vulns} vulnerabilities, found {len(result.vuln)}"
+        )

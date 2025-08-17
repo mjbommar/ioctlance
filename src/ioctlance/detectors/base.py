@@ -128,7 +128,7 @@ class VulnerabilityDetector(ABC):
         except Exception as e:
             # Don't fail vulnerability recording if raw capture fails
             pass
-        
+
         return {
             "title": title,
             "description": description,

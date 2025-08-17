@@ -13,9 +13,12 @@ class HookIoStartPacket(BaseHook):
         context = self.get_context()
         if context and hasattr(context, "DriverStartIo") and context.DriverStartIo:
             import angr
+
             new_state = self.state.project.factory.call_state(
-                addr=context.DriverStartIo, args=(DeviceObject, Irp), base_state=self.state,
-                add_options=angr.options.resilience
+                addr=context.DriverStartIo,
+                args=(DeviceObject, Irp),
+                base_state=self.state,
+                add_options=angr.options.resilience,
             )
             if context.simulation_manager:
                 context.simulation_manager.deferred.append(new_state)

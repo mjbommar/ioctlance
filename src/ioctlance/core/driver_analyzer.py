@@ -86,9 +86,8 @@ class DriverAnalyzer:
         if not handler_state:
             self.context.print_info("Using blank state for vulnerability hunting")
             import angr
-            handler_state = self.context.project.factory.blank_state(
-                add_options=angr.options.resilience
-            )
+
+            handler_state = self.context.project.factory.blank_state(add_options=angr.options.resilience)
 
         # Hunt for vulnerabilities
         handler_addr = int(ioctl_handler.address, 16)

@@ -28,6 +28,50 @@ class MemcpyHook(angr.SimProcedure):
         if context and context.config.debug:
             logger.info(f"memcpy hook: dst={dst}, src={src}, size={size}")
 
+        # FIRST: Check for controllable addresses (arbitrary read/write)
+        # This is different from buffer overflow - it's about WHERE, not HOW MUCH
+        dst_tainted = self._is_tainted(dst)
+        src_tainted = self._is_tainted(src)
+
+        if (dst_tainted or src_tainted) and context:
+            # Get IOCTL code if available
+            ioctl_code = "N/A"
+            if hasattr(self.state, "globals") and "IoControlCode" in self.state.globals:
+                try:
+                    ioctl_code = hex(self.state.globals["IoControlCode"])
+                except:
+                    pass
+
+            # This is a potential arbitrary read/write primitive
+            vuln_info = {
+                "title": f"{'Destination' if dst_tainted else 'Source'} Controllable - memcpy",
+                "description": f"User controls {'destination' if dst_tainted else 'source'} address in memcpy",
+                "state": str(self.state),
+                "eval": {
+                    "dst": str(dst)[:100],
+                    "src": str(src)[:100],
+                    "size": str(size)[:100],
+                    "dst_tainted": dst_tainted,
+                    "src_tainted": src_tainted,
+                    "IoControlCode": ioctl_code,
+                },
+                "parameters": {
+                    "controllable": "destination" if dst_tainted else "source",
+                },
+                "others": {
+                    "severity": "HIGH",
+                    "exploitation": "Arbitrary write" if dst_tainted else "Arbitrary read",
+                    "primitive_type": "write" if dst_tainted else "read",
+                    "technique": "Control memory address to read/write arbitrary kernel memory",
+                },
+            }
+
+            context.add_vulnerability(vuln_info)
+            context.print_info(
+                f"[VULN] {'Dest' if dst_tainted else 'Src'} controllable in memcpy - "
+                f"{'Arbitrary write' if dst_tainted else 'Arbitrary read'} primitive"
+            )
+
         # Check if size is symbolic (tainted)
         is_symbolic_size = False
         if hasattr(size, "symbolic"):
@@ -112,6 +156,28 @@ class MemcpyHook(angr.SimProcedure):
 
         return dst
 
+    def _is_tainted(self, value):
+        """Check if a value is tainted (user-controlled).
+
+        Args:
+            value: Value to check for taint
+
+        Returns:
+            True if value is tainted/user-controlled
+        """
+        if value is None:
+            return False
+        if hasattr(value, "symbolic"):
+            return value.symbolic
+        if hasattr(value, "variables"):
+            # Check if any variable comes from user input
+            for var in value.variables:
+                if any(
+                    target in str(var) for target in ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer"]
+                ):
+                    return True
+        return False
+
 
 class RtlCopyMemoryHook(MemcpyHook):
     """Alias for RtlCopyMemory which is the same as memcpy."""
@@ -157,16 +223,16 @@ def register_hooks(project: angr.Project) -> None:
             # Handle both Import objects and plain strings
             for imp in imports:
                 # Check if it's an Import object with name attribute or just a string
-                if hasattr(imp, 'name'):
+                if hasattr(imp, "name"):
                     imp_name = imp.name
-                    imp_addr = imp.rebased_addr if hasattr(imp, 'rebased_addr') else None
+                    imp_addr = imp.rebased_addr if hasattr(imp, "rebased_addr") else None
                 elif isinstance(imp, str):
                     imp_name = imp
                     # For string imports, we can't get the address directly
                     imp_addr = None
                 else:
                     continue
-                
+
                 if imp_name in ["memcpy", "memmove", "RtlCopyMemory"] and imp_addr:
                     hook_addr = imp_addr
                     if hook_addr and hook_addr not in hooked_addrs:

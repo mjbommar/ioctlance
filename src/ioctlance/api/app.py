@@ -36,11 +36,11 @@ class AnalysisRequest(BaseModel):
     """Request model for driver analysis."""
 
     timeout: int = Field(default=120, ge=1, le=3600, description="Analysis timeout in seconds")
-    ioctl_code: Optional[str] = Field(None, description="Specific IOCTL code to test (hex format)")
+    ioctl_code: str | None = Field(None, description="Specific IOCTL code to test (hex format)")
     complete_mode: bool = Field(False, description="Enable complete mode analysis")
     global_var_size: int = Field(default=0, ge=0, description="Size of .data section to symbolize")
-    bound: Optional[int] = Field(None, ge=0, description="Loop bound for analysis")
-    length: Optional[int] = Field(None, ge=0, description="Maximum path length")
+    bound: int | None = Field(None, ge=0, description="Loop bound for analysis")
+    length: int | None = Field(None, ge=0, description="Maximum path length")
 
 
 class AnalysisStatus(BaseModel):
@@ -49,11 +49,11 @@ class AnalysisStatus(BaseModel):
     job_id: str = Field(..., description="Unique job identifier")
     status: str = Field(..., description="Job status (pending/running/completed/failed)")
     driver_name: str = Field(..., description="Name of the driver being analyzed")
-    started_at: Optional[datetime] = Field(None, description="When analysis started")
-    completed_at: Optional[datetime] = Field(None, description="When analysis completed")
-    result: Optional[AnalysisResult] = Field(None, description="Analysis result if completed")
-    error: Optional[str] = Field(None, description="Error message if failed")
-    progress: Optional[Dict[str, Any]] = Field(None, description="Progress information")
+    started_at: datetime | None = Field(None, description="When analysis started")
+    completed_at: datetime | None = Field(None, description="When analysis completed")
+    result: AnalysisResult | None = Field(None, description="Analysis result if completed")
+    error: str | None = Field(None, description="Error message if failed")
+    progress: dict[str, Any] | None = Field(None, description="Progress information")
 
 
 class HealthStatus(BaseModel):
@@ -69,14 +69,14 @@ class HealthStatus(BaseModel):
 class BatchAnalysisRequest(BaseModel):
     """Request model for batch analysis."""
 
-    file_hashes: List[str] = Field(..., description="List of file hashes to analyze")
+    file_hashes: list[str] = Field(..., description="List of file hashes to analyze")
     config: AnalysisRequest = Field(default_factory=AnalysisRequest, description="Analysis configuration")
 
 
 # In-memory job storage (use Redis/database in production)
-analysis_jobs: Dict[str, AnalysisStatus] = {}
-websocket_connections: Dict[str, List[WebSocket]] = {}
-uploaded_files: Dict[str, Path] = {}
+analysis_jobs: dict[str, AnalysisStatus] = {}
+websocket_connections: dict[str, list[WebSocket]] = {}
+uploaded_files: dict[str, Path] = {}
 
 
 @asynccontextmanager
@@ -145,7 +145,7 @@ def calculate_file_hash(file_path: Path) -> str:
     return sha256_hash.hexdigest()
 
 
-async def notify_websocket_clients(job_id: str, message: Dict[str, Any]) -> None:
+async def notify_websocket_clients(job_id: str, message: dict[str, Any]) -> None:
     """Notify WebSocket clients about job updates."""
     if job_id in websocket_connections:
         disconnected = []
@@ -339,7 +339,7 @@ async def get_analysis_result(job_id: str, format: str = Query("json", enum=["js
         return StreamingResponse(generate(), media_type="application/json")
     else:
         # Use model_dump with mode='json' for proper datetime serialization
-        return JSONResponse(content=job.result.model_dump(mode='json'))
+        return JSONResponse(content=job.result.model_dump(mode="json"))
 
 
 @app.post("/batch", tags=["Analysis"])
@@ -431,7 +431,7 @@ async def delete_job(job_id: str):
 
 @app.get("/jobs", tags=["Analysis"])
 async def list_jobs(
-    status_filter: Optional[str] = Query(None, enum=["pending", "running", "completed", "failed"]),
+    status_filter: str | None = Query(None, enum=["pending", "running", "completed", "failed"]),
     limit: int = Query(100, ge=1, le=1000),
 ):
     """List all analysis jobs."""
