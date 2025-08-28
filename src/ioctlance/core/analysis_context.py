@@ -25,6 +25,17 @@ class AnalysisConfig:
     verbose: bool = False  # Verbose output mode
     recursion_kill: bool = True
 
+    # Additional tuning parameters for symbolic execution
+    max_steps: int = 100000  # Maximum symbolic execution steps (reduced from 500000)
+    max_states: int = 200  # Maximum concurrent states (reduced from 500)
+    handler_max_steps: int = 0x10000  # Max steps for handler discovery (reduced from 0x100000)
+    explosion_threshold: int = 2000  # State explosion threshold (reduced from 10000)
+
+    # Memory optimization settings
+    cfg_simple: bool = False  # Use simplified CFG (less memory)
+    max_symbolic_buffers: int = 50  # Limit symbolic buffer count
+    max_buffer_size: int = 0x100  # Max size per buffer (256 bytes)
+
     # Specific IOCTL to analyze (hex string like "0x22201c")
     target_ioctl: str | None = None
 
@@ -106,8 +117,20 @@ class AnalysisContext:
         # Load the driver with angr
         project = angr.Project(str(path), auto_load_libs=False)
 
-        # Get control flow graph
-        cfg = project.analyses.CFGFast()
+        # Get control flow graph with memory optimizations
+        if config.cfg_simple:
+            # Use simplified CFG for memory-constrained environments
+            cfg = project.analyses.CFGFast(
+                symbols=False,  # Don't resolve symbols
+                function_prologues=False,  # Skip prologue analysis
+                force_complete_scan=False,  # Don't scan everything
+                force_smart_scan=False,  # Disable smart scan to avoid warnings
+                data_references=False,  # Skip data refs (new parameter name)
+                normalize=False,  # Skip normalization
+            )
+        else:
+            # Full CFG for thorough analysis
+            cfg = project.analyses.CFGFast()
 
         # Set calling convention based on architecture
         if project.arch.name == archinfo.ArchX86.name:
@@ -155,8 +178,8 @@ class AnalysisContext:
         """
         self.vulnerabilities.append(vuln_info)
         # Buffer the vulnerability title for summary
-        if 'title' in vuln_info:
-            self.vuln_buffer.append(vuln_info['title'])
+        if "title" in vuln_info:
+            self.vuln_buffer.append(vuln_info["title"])
 
     def add_error(self, error_msg: str) -> None:
         """Add an error message.

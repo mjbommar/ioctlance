@@ -1,7 +1,7 @@
 """Breakpoint handlers for vulnerability detection during symbolic execution."""
 
 import logging
-from typing import Any, cast
+from typing import Any, cast, Dict, Tuple
 
 import claripy
 from angr import SimState
@@ -11,6 +11,54 @@ logger = logging.getLogger(__name__)
 from ..core.analysis_context import AnalysisContext
 from ..utils.helpers import get_state_globals
 from ..utils.state_capture import capture_raw_state
+
+
+# Global buffer cache to prevent memory explosion
+class SymbolicBufferCache:
+    """Cache for symbolic buffers to prevent excessive memory usage."""
+
+    def __init__(self, max_buffers: int = 50, max_size: int = 0x100):
+        self.cache: dict[str, tuple[int, Any]] = {}
+        self.max_buffers = max_buffers
+        self.max_size = max_size  # Max 256 bytes per buffer
+        self.hits = 0
+        self.misses = 0
+
+    def get_or_create(self, key: str, state: SimState, context: AnalysisContext) -> tuple[int, Any]:
+        """Get cached buffer or create new one."""
+        if key in self.cache:
+            self.hits += 1
+            return self.cache[key]
+
+        self.misses += 1
+
+        # Evict oldest if cache full
+        if len(self.cache) >= self.max_buffers:
+            oldest = next(iter(self.cache))
+            del self.cache[oldest]
+
+        # Create smaller buffer (was 0x200, now max 0x100)
+        size = min(self.max_size, 0x100)
+        mem = claripy.BVS(f"*{key[:32]}", 8 * size).reversed
+        addr = context.next_base_addr()
+        self.cache[key] = (addr, mem)
+
+        # Log cache stats periodically
+        if (self.hits + self.misses) % 100 == 0:
+            hit_rate = self.hits / (self.hits + self.misses) * 100 if self.hits + self.misses > 0 else 0
+            logger.debug(f"Buffer cache: {len(self.cache)} buffers, {hit_rate:.1f}% hit rate")
+
+        return addr, mem
+
+    def clear(self):
+        """Clear the cache."""
+        self.cache.clear()
+        self.hits = 0
+        self.misses = 0
+
+
+# Global instance
+_buffer_cache = SymbolicBufferCache()
 
 # Target buffers for null pointer dereference detection
 NPD_TARGETS = ["SystemBuffer", "Type3InputBuffer", "UserBuffer"]
@@ -148,15 +196,26 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
             from ..utils.helpers import is_tainted_buffer
 
             if is_tainted_buffer(target_base) and str(target_base) not in state.globals:
-                tmp_state = state.copy()
-                tmp_state.solver.add(target_base == context.next_base_addr())
-                if tmp_state.satisfiable():
+                # Use minimal constraint check instead of full state copy
+                can_be_valid = False
+                try:
+                    # Quick satisfiability check without copying entire state
+                    test_addr = context.next_base_addr()
+                    can_be_valid = state.solver.satisfiable(extra_constraints=[target_base == test_addr])
+                except:
+                    pass
+
+                if can_be_valid:
                     globals_dict = get_state_globals(state)
-                    globals_dict[str(target_base)] = True
-                    mem = claripy.BVS(f"*{str(target_base)}", 8 * 0x200).reversed
-                    addr = context.next_base_addr()
+                    key = str(target_base)[:64]  # Limit key length
+                    globals_dict[key] = True
+
+                    # Use cached buffer instead of creating new one
+                    addr, mem = _buffer_cache.get_or_create(key, state, context)
                     state.solver.add(target_base == addr)
-                    state.memory.store(addr, mem, 0x200, disable_actions=True, inspect=False)
+                    # Store smaller buffer (was 0x200, now from cache)
+                    size = min(_buffer_cache.max_size, 0x100)
+                    state.memory.store(addr, mem, size, disable_actions=True, inspect=False)
 
 
 def b_mem_write(state: SimState, context: AnalysisContext) -> None:
@@ -268,15 +327,26 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
             from ..utils.helpers import is_tainted_buffer
 
             if is_tainted_buffer(target_base) and str(target_base) not in state.globals:
-                tmp_state = state.copy()
-                tmp_state.solver.add(target_base == context.next_base_addr())
-                if tmp_state.satisfiable():
+                # Use minimal constraint check instead of full state copy
+                can_be_valid = False
+                try:
+                    # Quick satisfiability check without copying entire state
+                    test_addr = context.next_base_addr()
+                    can_be_valid = state.solver.satisfiable(extra_constraints=[target_base == test_addr])
+                except:
+                    pass
+
+                if can_be_valid:
                     globals_dict = get_state_globals(state)
-                    globals_dict[str(target_base)] = True
-                    mem = claripy.BVS(f"*{str(target_base)}", 8 * 0x200).reversed
-                    addr = context.next_base_addr()
+                    key = str(target_base)[:64]  # Limit key length
+                    globals_dict[key] = True
+
+                    # Use cached buffer instead of creating new one
+                    addr, mem = _buffer_cache.get_or_create(key, state, context)
                     state.solver.add(target_base == addr)
-                    state.memory.store(addr, mem, 0x200, disable_actions=True, inspect=False)
+                    # Store smaller buffer (was 0x200, now from cache)
+                    size = min(_buffer_cache.max_size, 0x100)
+                    state.memory.store(addr, mem, size, disable_actions=True, inspect=False)
 
 
 def b_call(state: SimState, context: AnalysisContext) -> None:

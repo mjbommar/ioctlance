@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from .driver import DriverInfo, IOCTLHandler
 from .vulnerability import Vulnerability
+from .binary_metadata import CompleteMetadata
 
 
 class PerformanceMetrics(BaseModel):
@@ -43,6 +44,9 @@ class AnalysisResult(BaseModel):
     analysis_time: float | None = Field(None, description="Total analysis time in seconds")
     analysis_date: datetime = Field(default_factory=datetime.now, description="Analysis timestamp")
     ioctlance_version: str = Field(default="0.2.0", description="IOCTLance version used")
+
+    # Binary metadata from binary-inspector
+    binary_metadata: CompleteMetadata | None = Field(None, description="Complete binary metadata and PE analysis")
 
     @property
     def vulnerability_count(self) -> int:

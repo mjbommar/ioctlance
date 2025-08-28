@@ -12,6 +12,7 @@ from ..core.ioctl_handler import find_ioctl_handler
 from ..core.vulnerability_hunter import VulnerabilityHunter
 from ..models import AnalysisResult, BasicInfo, DriverInfo, IOCTLHandler
 from ..utils.helpers import find_device_names, find_driver_type
+from ..utils.binary_metadata import extract_complete_metadata, analyze_binary_for_vulnerabilities
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,30 @@ class DriverAnalyzer:
         """
         # Track overall timing
         total_start = time.time()
+
+        # Extract binary metadata first (before symbolic execution)
+        logger.info("Extracting binary metadata...")
+        binary_metadata = None
+        try:
+            binary_metadata = extract_complete_metadata(self.context.driver_path)
+            if binary_metadata:
+                logger.info(
+                    f"Binary metadata extracted: {binary_metadata.machine}, "
+                    f"{binary_metadata.num_imports} imports, "
+                    f"{binary_metadata.num_sections} sections"
+                )
+
+                # Analyze for vulnerability patterns based on imports
+                binary_analysis = analyze_binary_for_vulnerabilities(binary_metadata)
+                if binary_analysis.vulnerability_indicators:
+                    for indicator in binary_analysis.vulnerability_indicators:
+                        logger.warning(f"Binary analysis warning: {indicator}")
+
+                logger.info(
+                    f"Binary security score: {binary_analysis.security_score}/100 (Risk: {binary_analysis.risk_level})"
+                )
+        except Exception as e:
+            logger.warning(f"Failed to extract binary metadata: {e}")
 
         # Find driver type
         self.context.driver_type = find_driver_type(self.context.project)
@@ -153,6 +178,7 @@ class DriverAnalyzer:
             driver_info=DriverInfo.from_file(self.context.driver_path),
             ioctl_handler=ioctl_handler,
             analysis_time=time.time() - total_start,
+            binary_metadata=binary_metadata,  # Add the complete metadata
         )
 
         self.context.print_info(f"Analysis complete: {result.vulnerability_count} vulnerabilities found")

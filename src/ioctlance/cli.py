@@ -12,14 +12,14 @@ logging.basicConfig(format="[%(levelname)s] %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Suppress noisy third-party loggers by default
-logging.getLogger('angr').setLevel(logging.WARNING)
-logging.getLogger('angr.sim_manager').setLevel(logging.ERROR)
-logging.getLogger('angr.exploration_techniques').setLevel(logging.ERROR)
-logging.getLogger('angr.exploration_techniques.suggestions').setLevel(logging.ERROR)
-logging.getLogger('cle').setLevel(logging.ERROR)  # Suppress symbol not found errors
-logging.getLogger('cle.loader').setLevel(logging.ERROR)
-logging.getLogger('cle.backends.pe').setLevel(logging.ERROR)
-logging.getLogger('pyvex').setLevel(logging.WARNING)
+logging.getLogger("angr").setLevel(logging.WARNING)
+logging.getLogger("angr.sim_manager").setLevel(logging.ERROR)
+logging.getLogger("angr.exploration_techniques").setLevel(logging.ERROR)
+logging.getLogger("angr.exploration_techniques.suggestions").setLevel(logging.ERROR)
+logging.getLogger("cle").setLevel(logging.ERROR)  # Suppress symbol not found errors
+logging.getLogger("cle.loader").setLevel(logging.ERROR)
+logging.getLogger("cle.backends.pe").setLevel(logging.ERROR)
+logging.getLogger("pyvex").setLevel(logging.WARNING)
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -92,24 +92,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         # Enable debug for third-party libraries too
-        logging.getLogger('angr').setLevel(logging.DEBUG)
-        logging.getLogger('cle').setLevel(logging.DEBUG)
+        logging.getLogger("angr").setLevel(logging.DEBUG)
+        logging.getLogger("cle").setLevel(logging.DEBUG)
     elif args.verbose:
         logging.getLogger().setLevel(logging.INFO)
         # Keep third-party libraries at WARNING
-        logging.getLogger('angr').setLevel(logging.WARNING)
-        logging.getLogger('angr.sim_manager').setLevel(logging.ERROR)
+        logging.getLogger("angr").setLevel(logging.WARNING)
+        logging.getLogger("angr.sim_manager").setLevel(logging.ERROR)
     elif args.json:
         # In JSON mode, suppress most logs but keep ERROR and WARNING
         logging.getLogger().setLevel(logging.WARNING)
-        logging.getLogger('angr').setLevel(logging.ERROR)
-        logging.getLogger('cle').setLevel(logging.ERROR)
+        logging.getLogger("angr").setLevel(logging.ERROR)
+        logging.getLogger("cle").setLevel(logging.ERROR)
     else:
         # Default: show INFO level for our code, suppress third-party noise
         logging.getLogger().setLevel(logging.INFO)
-        logging.getLogger('angr').setLevel(logging.WARNING)
-        logging.getLogger('angr.sim_manager').setLevel(logging.ERROR)
-        logging.getLogger('cle').setLevel(logging.WARNING)
+        logging.getLogger("angr").setLevel(logging.WARNING)
+        logging.getLogger("angr.sim_manager").setLevel(logging.ERROR)
+        logging.getLogger("cle").setLevel(logging.WARNING)
 
     # Validate driver path
     driver_path = Path(args.driver)
@@ -182,7 +182,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 # Print vulnerability summary instead of individual messages
                 context.print_vulnerability_summary()
-                
+
                 # Fallback if no summary was printed
                 if not context.vuln_buffer:
                     if result.vuln:

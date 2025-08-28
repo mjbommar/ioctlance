@@ -44,8 +44,9 @@ class HookIoCreateDevice(BaseHook):
         # Initialize device object
         devobjaddr = context.next_base_addr() if context else 0x50000000
         self.state.globals["device_object_addr"] = devobjaddr
-        device_object = claripy.BVS("device_object", 8 * 0x400)
-        self.state.memory.store(devobjaddr, device_object, 0x400, disable_actions=True, inspect=False)
+        # Reduced from 0x400 to 0x100 to save memory
+        device_object = claripy.BVS("device_object", 8 * 0x100)
+        self.state.memory.store(devobjaddr, device_object, 0x100, disable_actions=True, inspect=False)
         self.state.mem[devobjaddr].DEVICE_OBJECT.Flags = 0
         self.state.mem[DeviceObject].PDEVICE_OBJECT = devobjaddr
 
@@ -92,8 +93,9 @@ class HookIoAllocateMdl(BaseHook):
         mdl_addr = context.next_base_addr() if context else 0x52000000
 
         # Create MDL structure
-        mdl = claripy.BVS("mdl", 8 * 0x100)
-        self.state.memory.store(mdl_addr, mdl, 0x100, disable_actions=True, inspect=False)
+        # Reduced from 0x100 to 0x40 to save memory
+        mdl = claripy.BVS("mdl", 8 * 0x40)
+        self.state.memory.store(mdl_addr, mdl, 0x40, disable_actions=True, inspect=False)
 
         # If Irp is provided, store MDL in IRP
         if Irp != 0:
@@ -128,8 +130,9 @@ class HookIoGetCurrentProcess(BaseHook):
 
         # Create EPROCESS structure if not exists
         if "current_eprocess" not in self.state.globals:
-            eprocess = claripy.BVS("eprocess", 8 * 0x800)
-            self.state.memory.store(eprocess_addr, eprocess, 0x800, disable_actions=True, inspect=False)
+            # Reduced from 0x800 to 0x200 to save memory
+            eprocess = claripy.BVS("eprocess", 8 * 0x200)
+            self.state.memory.store(eprocess_addr, eprocess, 0x200, disable_actions=True, inspect=False)
             self.state.globals["current_eprocess"] = eprocess_addr
         else:
             eprocess_addr = self.state.globals["current_eprocess"]
