@@ -15,19 +15,32 @@ class SymlinkAttackDetector(VulnerabilityDetector):
     # File operations that are vulnerable to symlink attacks
     VULNERABLE_FUNCTIONS = {
         # File creation/opening
-        "ZwCreateFile", "NtCreateFile", "IoCreateFile", "IoCreateFileEx",
-        "ZwOpenFile", "NtOpenFile", "IoOpenFile",
-
+        "ZwCreateFile",
+        "NtCreateFile",
+        "IoCreateFile",
+        "IoCreateFileEx",
+        "ZwOpenFile",
+        "NtOpenFile",
+        "IoOpenFile",
         # File operations
-        "ZwWriteFile", "NtWriteFile", "ZwReadFile", "NtReadFile",
-        "ZwDeleteFile", "NtDeleteFile", "ZwSetInformationFile", "NtSetInformationFile",
-
+        "ZwWriteFile",
+        "NtWriteFile",
+        "ZwReadFile",
+        "NtReadFile",
+        "ZwDeleteFile",
+        "NtDeleteFile",
+        "ZwSetInformationFile",
+        "NtSetInformationFile",
         # Directory operations
-        "ZwCreateDirectoryObject", "NtCreateDirectoryObject",
-
+        "ZwCreateDirectoryObject",
+        "NtCreateDirectoryObject",
         # Registry operations (can also be vulnerable)
-        "ZwCreateKey", "NtCreateKey", "ZwOpenKey", "NtOpenKey",
-        "ZwSetValueKey", "NtSetValueKey",
+        "ZwCreateKey",
+        "NtCreateKey",
+        "ZwOpenKey",
+        "NtOpenKey",
+        "ZwSetValueKey",
+        "NtSetValueKey",
     }
 
     def __init__(self, context):
@@ -66,14 +79,17 @@ class SymlinkAttackDetector(VulnerabilityDetector):
                 return self._check_file_operation(state, function_name, **kwargs)
 
             # Track path validation functions
-            elif function_name in ["GetFileAttributes", "GetFileAttributesEx",
-                                 "RtlDoesFileExists", "IoCheckShareAccess"]:
+            elif function_name in [
+                "GetFileAttributes",
+                "GetFileAttributesEx",
+                "RtlDoesFileExists",
+                "IoCheckShareAccess",
+            ]:
                 self._track_path_check(state, function_name, **kwargs)
 
         return None
 
-    def _check_file_operation(self, state: SimState, function_name: str,
-                             **kwargs: Any) -> dict[str, Any] | None:
+    def _check_file_operation(self, state: SimState, function_name: str, **kwargs: Any) -> dict[str, Any] | None:
         """Check file operation for symlink vulnerabilities.
 
         Args:
@@ -124,18 +140,13 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         """
         try:
             file_path = self._get_file_path_parameter(state, function_name)
-            if file_path is not None and hasattr(file_path, 'concrete'):
+            if file_path is not None and hasattr(file_path, "concrete"):
                 path_id = self._get_path_id(file_path)
-                self.checked_paths[path_id] = {
-                    'check_addr': state.addr,
-                    'function': function_name,
-                    'state': state
-                }
+                self.checked_paths[path_id] = {"check_addr": state.addr, "function": function_name, "state": state}
         except:
             pass
 
-    def _track_file_operation(self, state: SimState, file_path: Any,
-                             function_name: str) -> None:
+    def _track_file_operation(self, state: SimState, file_path: Any, function_name: str) -> None:
         """Track file operation for TOCTOU detection.
 
         Args:
@@ -144,15 +155,11 @@ class SymlinkAttackDetector(VulnerabilityDetector):
             function_name: Operation function name
         """
         try:
-            if hasattr(file_path, 'concrete'):
+            if hasattr(file_path, "concrete"):
                 path_id = self._get_path_id(file_path)
                 if path_id not in self.file_operations:
                     self.file_operations[path_id] = []
-                self.file_operations[path_id].append({
-                    'addr': state.addr,
-                    'function': function_name,
-                    'state': state
-                })
+                self.file_operations[path_id].append({"addr": state.addr, "function": function_name, "state": state})
         except:
             pass
 
@@ -169,7 +176,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         try:
             # For most NT/Zw functions, OBJECT_ATTRIBUTES is in RDX (2nd param)
             if function_name.startswith(("Zw", "Nt")):
-                if hasattr(state.regs, 'rdx'):
+                if hasattr(state.regs, "rdx"):
                     obj_attr_ptr = state.regs.rdx
                     # OBJECT_ATTRIBUTES has ObjectName (UNICODE_STRING*) at offset 0x10
                     unicode_str_ptr = state.memory.load(obj_attr_ptr + 0x10, 8)
@@ -179,7 +186,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
 
             # For Io functions, path may be in RCX or RDX
             elif function_name.startswith("Io"):
-                if hasattr(state.regs, 'rcx'):
+                if hasattr(state.regs, "rcx"):
                     return state.regs.rcx
 
         except:
@@ -199,8 +206,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         # Use string representation for comparison
         return str(file_path)[:100]
 
-    def _is_toctou_vulnerable(self, state: SimState, file_path: Any,
-                             function_name: str) -> bool:
+    def _is_toctou_vulnerable(self, state: SimState, file_path: Any, function_name: str) -> bool:
         """Check for Time-of-Check-Time-of-Use vulnerability.
 
         Args:
@@ -224,8 +230,8 @@ class SymlinkAttackDetector(VulnerabilityDetector):
 
             if function_name in ["ZwCreateFile", "ZwOpenFile", "ZwWriteFile", "ZwDeleteFile"]:
                 # Check instruction distance
-                check_addr = check_info['check_addr']
-                current_addr = state.addr if hasattr(state, 'addr') else 0
+                check_addr = check_info["check_addr"]
+                current_addr = state.addr if hasattr(state, "addr") else 0
 
                 # If there's distance between check and use, it's TOCTOU
                 if abs(current_addr - check_addr) > 0x10:  # More than a few instructions
@@ -233,8 +239,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
 
         return False
 
-    def _follows_symlinks_unsafely(self, state: SimState, function_name: str,
-                                  file_path: Any) -> bool:
+    def _follows_symlinks_unsafely(self, state: SimState, function_name: str, file_path: Any) -> bool:
         """Check if operation follows symlinks unsafely.
 
         Args:
@@ -251,13 +256,13 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         if function_name in ["ZwCreateFile", "NtCreateFile"]:
             try:
                 # CreateOptions is typically in stack (5th parameter)
-                if hasattr(state.regs, 'rsp'):
+                if hasattr(state.regs, "rsp"):
                     create_options = state.memory.load(state.regs.rsp + 0x28, 4)
                     FILE_FLAG_OPEN_REPARSE_POINT = 0x00200000
 
                     # If flag is not set and path is tainted, it's vulnerable
                     if self._is_tainted(file_path):
-                        options_val = state.solver.eval(create_options) if hasattr(create_options, 'concrete') else 0
+                        options_val = state.solver.eval(create_options) if hasattr(create_options, "concrete") else 0
                         if not (options_val & FILE_FLAG_OPEN_REPARSE_POINT):
                             return True
             except:
@@ -277,7 +282,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         """
         try:
             # Check if path contains temp directory indicators
-            if hasattr(file_path, 'symbolic'):
+            if hasattr(file_path, "symbolic"):
                 path_str = str(file_path)
                 temp_indicators = ["\\temp\\", "\\tmp\\", "%temp%", "%tmp%", "\\local\\temp"]
 
@@ -291,8 +296,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
 
         return False
 
-    def _has_creation_race(self, state: SimState, function_name: str,
-                          file_path: Any) -> bool:
+    def _has_creation_race(self, state: SimState, function_name: str, file_path: Any) -> bool:
         """Check for race condition in file creation.
 
         Args:
@@ -306,24 +310,24 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         if function_name in ["ZwCreateFile", "NtCreateFile"]:
             try:
                 # Check if using CREATE_NEW disposition without proper locking
-                if hasattr(state.regs, 'rsp'):
+                if hasattr(state.regs, "rsp"):
                     # Disposition is typically 6th parameter
                     disposition = state.memory.load(state.regs.rsp + 0x30, 4)
                     FILE_OPEN_IF = 3  # Opens if exists, creates if not
 
-                    disp_val = state.solver.eval(disposition) if hasattr(disposition, 'concrete') else 0
+                    disp_val = state.solver.eval(disposition) if hasattr(disposition, "concrete") else 0
 
                     # FILE_OPEN_IF without exclusive access is vulnerable
                     if disp_val == FILE_OPEN_IF:
                         # Check if exclusive access is requested
-                        desired_access = state.regs.rcx if hasattr(state.regs, 'rcx') else None
+                        desired_access = state.regs.rcx if hasattr(state.regs, "rcx") else None
                         if desired_access is not None:
                             GENERIC_WRITE = 0x40000000
                             FILE_WRITE_DATA = 0x00000002
 
-                            access_val = state.solver.eval(desired_access) if hasattr(desired_access, 'concrete') else 0
+                            access_val = state.solver.eval(desired_access) if hasattr(desired_access, "concrete") else 0
                             # If writing without exclusive lock, vulnerable
-                            if (access_val & (GENERIC_WRITE | FILE_WRITE_DATA)):
+                            if access_val & (GENERIC_WRITE | FILE_WRITE_DATA):
                                 return True
             except:
                 pass
@@ -345,7 +349,8 @@ class SymlinkAttackDetector(VulnerabilityDetector):
             path_str = str(file_path)
             # Simple heuristic: paths with long hex strings or GUIDs
             import re
-            if re.search(r'[0-9a-f]{8,}', path_str, re.IGNORECASE):
+
+            if re.search(r"[0-9a-f]{8,}", path_str, re.IGNORECASE):
                 return True
         except:
             pass
@@ -364,18 +369,17 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         if value is None:
             return False
 
-        if hasattr(value, 'symbolic') and value.symbolic:
+        if hasattr(value, "symbolic") and value.symbolic:
             for var in value.variables:
                 var_name = str(var).lower()
-                if 'input' in var_name or 'buffer' in var_name or 'user' in var_name:
+                if "input" in var_name or "buffer" in var_name or "user" in var_name:
                     return True
 
         return False
 
-    def _create_toctou_vuln(self, state: SimState, function_name: str,
-                           file_path: Any) -> dict[str, Any]:
+    def _create_toctou_vuln(self, state: SimState, function_name: str, file_path: Any) -> dict[str, Any]:
         """Create TOCTOU vulnerability info."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "toctou", function_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "toctou", function_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -384,20 +388,15 @@ class SymlinkAttackDetector(VulnerabilityDetector):
         return self.create_vulnerability_info(
             title="Symlink Attack - TOCTOU Race Condition",
             description=f"Time-of-Check-Time-of-Use vulnerability in {function_name}: "
-                       "File path checked earlier but used without re-validation",
+            "File path checked earlier but used without re-validation",
             state=state,
             severity="HIGH",
-            parameters={
-                "function": function_name,
-                "file_path": str(file_path)[:100],
-                "type": "toctou"
-            }
+            parameters={"function": function_name, "file_path": str(file_path)[:100], "type": "toctou"},
         )
 
-    def _create_symlink_vuln(self, state: SimState, function_name: str,
-                           file_path: Any) -> dict[str, Any]:
+    def _create_symlink_vuln(self, state: SimState, function_name: str, file_path: Any) -> dict[str, Any]:
         """Create symlink following vulnerability info."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "symlink_follow", function_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "symlink_follow", function_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -408,17 +407,12 @@ class SymlinkAttackDetector(VulnerabilityDetector):
             description=f"{function_name} follows symbolic links without FILE_FLAG_OPEN_REPARSE_POINT",
             state=state,
             severity="HIGH",
-            parameters={
-                "function": function_name,
-                "file_path": str(file_path)[:100],
-                "type": "symlink_following"
-            }
+            parameters={"function": function_name, "file_path": str(file_path)[:100], "type": "symlink_following"},
         )
 
-    def _create_temp_file_vuln(self, state: SimState, function_name: str,
-                              file_path: Any) -> dict[str, Any]:
+    def _create_temp_file_vuln(self, state: SimState, function_name: str, file_path: Any) -> dict[str, Any]:
         """Create predictable temp file vulnerability info."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "predictable_temp", function_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "predictable_temp", function_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -429,17 +423,12 @@ class SymlinkAttackDetector(VulnerabilityDetector):
             description=f"Predictable temporary file creation in {function_name} allows symlink attacks",
             state=state,
             severity="MEDIUM",
-            parameters={
-                "function": function_name,
-                "file_path": str(file_path)[:100],
-                "type": "predictable_temp_file"
-            }
+            parameters={"function": function_name, "file_path": str(file_path)[:100], "type": "predictable_temp_file"},
         )
 
-    def _create_race_vuln(self, state: SimState, function_name: str,
-                        file_path: Any) -> dict[str, Any]:
+    def _create_race_vuln(self, state: SimState, function_name: str, file_path: Any) -> dict[str, Any]:
         """Create file creation race vulnerability info."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "creation_race", function_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "creation_race", function_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -450,11 +439,7 @@ class SymlinkAttackDetector(VulnerabilityDetector):
             description=f"Race condition in {function_name} with FILE_OPEN_IF allows symlink attacks",
             state=state,
             severity="MEDIUM",
-            parameters={
-                "function": function_name,
-                "file_path": str(file_path)[:100],
-                "type": "creation_race"
-            }
+            parameters={"function": function_name, "file_path": str(file_path)[:100], "type": "creation_race"},
         )
 
 

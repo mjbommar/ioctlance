@@ -130,7 +130,7 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
                     pass
 
             metadata.checksum = raw_metadata.get("checksum")
-            
+
             # Convert characteristics to int if it's a string (like "EXECUTABLE_IMAGE, LARGE_ADDRESS_AWARE")
             raw_characteristics = raw_metadata.get("characteristics")
             if raw_characteristics:
@@ -157,7 +157,7 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
                     metadata.characteristics = None
             else:
                 metadata.characteristics = None
-                
+
             # Convert dll_characteristics to int if it's a string (like "HIGH_ENTROPY_VA, DYNAMIC_BASE, NX_COMPAT")
             raw_dll_characteristics = raw_metadata.get("dll_characteristics")
             if raw_dll_characteristics:
@@ -181,7 +181,7 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
                     metadata.dll_characteristics = None
             else:
                 metadata.dll_characteristics = None
-                
+
             metadata.subsystem = raw_metadata.get("subsystem")
 
             # === Architecture ===
@@ -191,9 +191,9 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
 
             metadata.is_driver = raw_metadata.get("is_driver", False)
             metadata.is_gui = raw_metadata.get("is_gui", False)
-            
+
             # is_dll and is_exe already set in characteristics parsing above
-            if not hasattr(metadata, 'is_dll') or metadata.is_dll is None:
+            if not hasattr(metadata, "is_dll") or metadata.is_dll is None:
                 metadata.is_dll = False
             metadata.is_exe = not metadata.is_dll
 

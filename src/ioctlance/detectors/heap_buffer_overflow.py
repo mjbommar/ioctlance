@@ -56,10 +56,7 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
         addr_str = str(address)
 
         # Check for heap-related addresses
-        heap_indicators = [
-            "ExAllocatePool", "RtlAllocateHeap",
-            "ExAllocatePoolWithTag", "HeapAlloc"
-        ]
+        heap_indicators = ["ExAllocatePool", "RtlAllocateHeap", "ExAllocatePoolWithTag", "HeapAlloc"]
 
         is_heap = any(ind in addr_str for ind in heap_indicators)
         if not is_heap:
@@ -119,11 +116,7 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
             return False
 
         addr_str = str(address)
-        heap_indicators = [
-            "ExAllocatePool", "RtlAllocateHeap",
-            "ExAllocatePoolWithTag", "HeapAlloc",
-            "pool", "heap"
-        ]
+        heap_indicators = ["ExAllocatePool", "RtlAllocateHeap", "ExAllocatePoolWithTag", "HeapAlloc", "pool", "heap"]
 
         return any(ind.lower() in addr_str.lower() for ind in heap_indicators)
 
@@ -136,8 +129,12 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
 
         # Check for user input sources
         user_sources = [
-            "SystemBuffer", "Type3InputBuffer", "UserBuffer",
-            "input_buffer", "InputBufferLength", "IoControlCode"
+            "SystemBuffer",
+            "Type3InputBuffer",
+            "UserBuffer",
+            "input_buffer",
+            "InputBufferLength",
+            "IoControlCode",
         ]
 
         for source in user_sources:
@@ -146,8 +143,8 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
                 return True
 
         # Check if symbolic and derived from user input
-        if hasattr(size, 'symbolic') and size.symbolic:
-            if hasattr(size, 'variables'):
+        if hasattr(size, "symbolic") and size.symbolic:
+            if hasattr(size, "variables"):
                 for var in size.variables:
                     var_str = str(var)
                     for source in user_sources:
@@ -165,13 +162,16 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
 
         # Look for multiplication or addition that could overflow
         overflow_patterns = [
-            "__mul__", "__add__", "*", "+",
-            "Concat"  # Concatenation can lead to large values
+            "__mul__",
+            "__add__",
+            "*",
+            "+",
+            "Concat",  # Concatenation can lead to large values
         ]
 
         has_arithmetic = any(pattern in size_str for pattern in overflow_patterns)
 
-        if has_arithmetic and hasattr(state, 'solver'):
+        if has_arithmetic and hasattr(state, "solver"):
             try:
                 # Check if size can be very large (potential overflow)
                 tmp_state = state.copy()
@@ -209,10 +209,12 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
 
         return False
 
-    def _create_heap_overflow_vuln(self, state: SimState, address: Any, size: Any, integer_overflow: bool = False) -> dict[str, Any]:
+    def _create_heap_overflow_vuln(
+        self, state: SimState, address: Any, size: Any, integer_overflow: bool = False
+    ) -> dict[str, Any]:
         """Create heap overflow vulnerability."""
         vuln_type = "heap_overflow_int" if integer_overflow else "heap_overflow"
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, vuln_type, str(address)[:30])
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, vuln_type, str(address)[:30])
 
         if vuln_key in self.detected_vulns:
             return None
@@ -222,7 +224,8 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
 
         return self.create_vulnerability_info(
             title=title,
-            description="Heap buffer overflow due to " + ("integer overflow in size calculation" if integer_overflow else "controllable size"),
+            description="Heap buffer overflow due to "
+            + ("integer overflow in size calculation" if integer_overflow else "controllable size"),
             state=state,
             parameters={
                 "address": str(address)[:100],
@@ -236,13 +239,13 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
                 "confidence": "HIGH" if integer_overflow else "MEDIUM",
                 "windows_specific": "Can corrupt heap metadata, trigger KERNEL_MODE_HEAP_CORRUPTION (0x13A)",
                 "cwe": "CWE-122: Heap-based Buffer Overflow",
-                "mitigation": "Validate sizes, use safe integer arithmetic, bounds checking"
-            }
+                "mitigation": "Validate sizes, use safe integer arithmetic, bounds checking",
+            },
         )
 
     def _create_unbounded_copy_vuln(self, state: SimState, func_name: str, dest: Any, src: Any) -> dict[str, Any]:
         """Create unbounded copy vulnerability."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "unbounded_copy", func_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "unbounded_copy", func_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -264,12 +267,14 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
                 "confidence": "HIGH",
                 "windows_specific": "Use RtlStringCbCopy or RtlStringCchCopy instead",
                 "cwe": "CWE-120: Buffer Copy without Checking Size of Input",
-            }
+            },
         )
 
-    def _create_sized_copy_vuln(self, state: SimState, func_name: str, dest: Any, src: Any, size: Any) -> dict[str, Any]:
+    def _create_sized_copy_vuln(
+        self, state: SimState, func_name: str, dest: Any, src: Any, size: Any
+    ) -> dict[str, Any]:
         """Create controllable size copy vulnerability."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "sized_copy", func_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "sized_copy", func_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -292,12 +297,12 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
                 "confidence": "MEDIUM",
                 "windows_specific": "Validate size against allocated buffer size",
                 "cwe": "CWE-805: Buffer Access with Incorrect Length Value",
-            }
+            },
         )
 
     def _create_size_mismatch_vuln(self, state: SimState, func_name: str, dest: Any, size: Any) -> dict[str, Any]:
         """Create size mismatch vulnerability."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "size_mismatch", func_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "size_mismatch", func_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -319,12 +324,12 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
                 "confidence": "MEDIUM",
                 "windows_specific": "Track allocation sizes, validate against usage",
                 "cwe": "CWE-131: Incorrect Calculation of Buffer Size",
-            }
+            },
         )
 
     def _get_ioctl_code(self, state: SimState) -> str:
         """Get current IOCTL code."""
-        if hasattr(self.context, 'io_control_code'):
+        if hasattr(self.context, "io_control_code"):
             try:
                 ioctl = state.solver.eval_one(self.context.io_control_code)
                 return hex(ioctl)

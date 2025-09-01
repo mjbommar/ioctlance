@@ -32,29 +32,47 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
     # Common Windows kernel object types
     KERNEL_OBJECT_TYPES = {
-        'FILE_OBJECT', 'DEVICE_OBJECT', 'DRIVER_OBJECT',
-        'ETHREAD', 'EPROCESS', 'KEVENT', 'KMUTEX', 'KSEMAPHORE',
-        'TOKEN', 'SECTION_OBJECT', 'KEY_OBJECT', 'DESKTOP_OBJECT'
+        "FILE_OBJECT",
+        "DEVICE_OBJECT",
+        "DRIVER_OBJECT",
+        "ETHREAD",
+        "EPROCESS",
+        "KEVENT",
+        "KMUTEX",
+        "KSEMAPHORE",
+        "TOKEN",
+        "SECTION_OBJECT",
+        "KEY_OBJECT",
+        "DESKTOP_OBJECT",
     }
 
     # Functions that manipulate object references (direct reference only)
     REFERENCE_FUNCTIONS = {
-        'ObReferenceObject', 'ObReferenceObjectByName',
-        'ObReferenceObjectWithTag', 'ObfReferenceObject'
+        "ObReferenceObject",
+        "ObReferenceObjectByName",
+        "ObReferenceObjectWithTag",
+        "ObfReferenceObject",
     }
 
     DEREFERENCE_FUNCTIONS = {
-        'ObDereferenceObject', 'ObDereferenceObjectDeferDelete',
-        'ObDereferenceObjectWithTag', 'ObfDereferenceObject',
-        'ObDereferenceObjectDeferDeleteWithTag'
+        "ObDereferenceObject",
+        "ObDereferenceObjectDeferDelete",
+        "ObDereferenceObjectWithTag",
+        "ObfDereferenceObject",
+        "ObDereferenceObjectDeferDeleteWithTag",
     }
 
     # Functions that get object pointers
     OBJECT_GETTER_FUNCTIONS = {
-        'ObReferenceObjectByHandle', 'ObReferenceObjectByPointer',
-        'IoGetDeviceObjectPointer', 'IoGetAttachedDevice',
-        'PsLookupProcessByProcessId', 'PsLookupThreadByThreadId',
-        'ZwOpenFile', 'ZwOpenProcess', 'ZwOpenThread'
+        "ObReferenceObjectByHandle",
+        "ObReferenceObjectByPointer",
+        "IoGetDeviceObjectPointer",
+        "IoGetAttachedDevice",
+        "PsLookupProcessByProcessId",
+        "PsLookupThreadByThreadId",
+        "ZwOpenFile",
+        "ZwOpenProcess",
+        "ZwOpenThread",
     }
 
     @property
@@ -118,11 +136,7 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
         # Check if object pointer is tainted (user-controlled)
         if self._is_tainted(object_ptr):
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "tainted_reference",
-                str(object_ptr)[:30]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "tainted_reference", str(object_ptr)[:30])
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -141,8 +155,8 @@ class ObjectManipulationDetector(VulnerabilityDetector):
                     "exploitation": "Arbitrary kernel object manipulation",
                     "confidence": "HIGH",
                     "mitigation": "Validate object pointer before reference",
-                    "windows_specific": "Can lead to privilege escalation via object type confusion"
-                }
+                    "windows_specific": "Can lead to privilege escalation via object type confusion",
+                },
             )
 
         # Track reference count
@@ -152,7 +166,7 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
         # Try to get concrete address for tracking
         try:
-            if hasattr(object_ptr, 'concrete'):
+            if hasattr(object_ptr, "concrete"):
                 concrete_addr = state.solver.eval_one(object_ptr)
             else:
                 concrete_addr = int(object_ptr)
@@ -164,11 +178,7 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
             # Check for excessive references (potential reference count overflow)
             if self.object_refs[state_id][concrete_addr] > 100:
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "ref_overflow",
-                    hex(concrete_addr)
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "ref_overflow", hex(concrete_addr))
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -187,8 +197,8 @@ class ObjectManipulationDetector(VulnerabilityDetector):
                         "severity": "MEDIUM",
                         "exploitation": "Reference count overflow can lead to use-after-free",
                         "confidence": "MEDIUM",
-                        "mitigation": "Limit reference operations per IOCTL"
-                    }
+                        "mitigation": "Limit reference operations per IOCTL",
+                    },
                 )
         except:
             # Can't get concrete address, skip tracking
@@ -217,11 +227,7 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
         # Check if object pointer is tainted
         if self._is_tainted(object_ptr):
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "tainted_dereference",
-                str(object_ptr)[:30]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "tainted_dereference", str(object_ptr)[:30])
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -240,15 +246,15 @@ class ObjectManipulationDetector(VulnerabilityDetector):
                     "exploitation": "Can cause arbitrary object destruction",
                     "confidence": "HIGH",
                     "mitigation": "Validate object pointer before dereference",
-                    "windows_specific": "Can trigger use-after-free or double-free"
-                }
+                    "windows_specific": "Can trigger use-after-free or double-free",
+                },
             )
 
         # Track dereference for reference counting
         state_id = id(state)
         if state_id in self.object_refs:
             try:
-                if hasattr(object_ptr, 'concrete'):
+                if hasattr(object_ptr, "concrete"):
                     concrete_addr = state.solver.eval_one(object_ptr)
                 else:
                     concrete_addr = int(object_ptr)
@@ -259,11 +265,7 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
                     # Check for negative reference count (over-dereference)
                     if self.object_refs[state_id][concrete_addr] < 0:
-                        vuln_key = (
-                            state.addr if hasattr(state, 'addr') else 0,
-                            "over_deref",
-                            hex(concrete_addr)
-                        )
+                        vuln_key = (state.addr if hasattr(state, "addr") else 0, "over_deref", hex(concrete_addr))
                         if vuln_key in self.detected_vulns:
                             return None
                         self.detected_vulns.add(vuln_key)
@@ -283,8 +285,8 @@ class ObjectManipulationDetector(VulnerabilityDetector):
                                 "exploitation": "Can lead to use-after-free",
                                 "confidence": "HIGH",
                                 "mitigation": "Ensure balanced reference/dereference",
-                                "windows_specific": "May trigger BAD_REFERENCE_COUNT bugcheck"
-                            }
+                                "windows_specific": "May trigger BAD_REFERENCE_COUNT bugcheck",
+                            },
                         )
             except:
                 pass
@@ -303,18 +305,14 @@ class ObjectManipulationDetector(VulnerabilityDetector):
             Vulnerability info if detected
         """
         # Check if handle/ID parameter is tainted
-        if 'Handle' in func_name or 'ByProcessId' in func_name or 'ByThreadId' in func_name:
+        if "Handle" in func_name or "ByProcessId" in func_name or "ByThreadId" in func_name:
             # First argument is usually the handle/ID
             handle_arg = kwargs.get("args", [None])[0]
             if handle_arg is None:
                 handle_arg = kwargs.get("handle") or kwargs.get("process_id") or kwargs.get("thread_id")
 
             if handle_arg and self._is_tainted(handle_arg):
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "tainted_handle",
-                    str(handle_arg)[:30]
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "tainted_handle", str(handle_arg)[:30])
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -333,22 +331,18 @@ class ObjectManipulationDetector(VulnerabilityDetector):
                         "exploitation": "Can access arbitrary kernel objects",
                         "confidence": "HIGH",
                         "mitigation": "Validate handles before use",
-                        "windows_specific": "May allow cross-process object access"
-                    }
+                        "windows_specific": "May allow cross-process object access",
+                    },
                 )
 
         # Check for type confusion possibilities
-        if func_name == 'ObReferenceObjectByPointer':
+        if func_name == "ObReferenceObjectByPointer":
             # Check the ObjectType parameter (usually 3rd argument)
             args = kwargs.get("args", [])
             if len(args) >= 3:
                 object_type = args[2]
                 if self._is_tainted(object_type):
-                    vuln_key = (
-                        state.addr if hasattr(state, 'addr') else 0,
-                        "type_confusion",
-                        func_name
-                    )
+                    vuln_key = (state.addr if hasattr(state, "addr") else 0, "type_confusion", func_name)
                     if vuln_key in self.detected_vulns:
                         return None
                     self.detected_vulns.add(vuln_key)
@@ -366,8 +360,8 @@ class ObjectManipulationDetector(VulnerabilityDetector):
                             "exploitation": "Type confusion can bypass security checks",
                             "confidence": "HIGH",
                             "mitigation": "Validate object types",
-                            "windows_specific": "Can cast objects to incorrect types"
-                        }
+                            "windows_specific": "Can cast objects to incorrect types",
+                        },
                     )
 
         return None
@@ -385,15 +379,12 @@ class ObjectManipulationDetector(VulnerabilityDetector):
             return False
 
         # Check if symbolic
-        if hasattr(value, 'symbolic') and value.symbolic:
+        if hasattr(value, "symbolic") and value.symbolic:
             return True
 
         # Check if contains user input references
         value_str = str(value)
-        tainted_sources = [
-            'SystemBuffer', 'Type3InputBuffer', 'UserBuffer',
-            'InputBuffer', 'OutputBuffer', 'IRP'
-        ]
+        tainted_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer", "IRP"]
         return any(src in value_str for src in tainted_sources)
 
     def _get_ioctl_code(self, state: SimState) -> str:
@@ -405,9 +396,9 @@ class ObjectManipulationDetector(VulnerabilityDetector):
         Returns:
             IOCTL code as hex string
         """
-        if hasattr(state, 'globals') and 'IoControlCode' in state.globals:
-            return hex(state.globals['IoControlCode'])
-        elif hasattr(self.context, 'io_control_code') and self.context.io_control_code:
+        if hasattr(state, "globals") and "IoControlCode" in state.globals:
+            return hex(state.globals["IoControlCode"])
+        elif hasattr(self.context, "io_control_code") and self.context.io_control_code:
             try:
                 return hex(state.solver.eval_one(self.context.io_control_code))
             except:

@@ -96,9 +96,9 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
 
         if is_tainted_addr or is_tainted_size:
             vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
+                state.addr if hasattr(state, "addr") else 0,
                 "mmmapiosspace",
-                f"{is_tainted_addr}_{is_tainted_size}"
+                f"{is_tainted_addr}_{is_tainted_size}",
             )
             if vuln_key in self.detected_vulns:
                 return None
@@ -124,7 +124,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                     "impact": "Full system compromise",
                     "cve_pattern": "CVE-2019-16098, CVE-2020-12446",
                     "mitigation": "Validate physical addresses, use MDL instead",
-                    "windows_specific": "Can bypass KASLR, read credentials, patch kernel"
+                    "windows_specific": "Can bypass KASLR, read credentials, patch kernel",
                 },
             )
 
@@ -145,15 +145,8 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
             Vulnerability info if detected
         """
         # Check if any parameters are tainted
-        if (self._is_tainted(section_handle) or
-            self._is_tainted(process_handle) or
-            self._is_tainted(base_address)):
-
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "zwmapviewofsection",
-                "tainted"
-            )
+        if self._is_tainted(section_handle) or self._is_tainted(process_handle) or self._is_tainted(base_address):
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "zwmapviewofsection", "tainted")
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -173,7 +166,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                     "exploitation": "Map arbitrary memory sections",
                     "confidence": "HIGH",
                     "impact": "Memory disclosure, privilege escalation",
-                    "mitigation": "Validate handles and addresses"
+                    "mitigation": "Validate handles and addresses",
                 },
             )
 
@@ -200,9 +193,9 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
 
         if is_tainted_src or is_tainted_dst or is_tainted_size:
             vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
+                state.addr if hasattr(state, "addr") else 0,
                 "mmcopymemory",
-                f"{is_tainted_src}_{is_tainted_dst}"
+                f"{is_tainted_src}_{is_tainted_dst}",
             )
             if vuln_key in self.detected_vulns:
                 return None
@@ -223,7 +216,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                     "exploitation": "Read/write arbitrary memory",
                     "confidence": "HIGH",
                     "impact": "Memory corruption, info disclosure",
-                    "mitigation": "Validate memory ranges"
+                    "mitigation": "Validate memory ranges",
                 },
             )
 
@@ -231,9 +224,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
 
     # ==================== Process Manipulation ====================
 
-    def check_zwterminateprocess(
-        self, state: SimState, process_handle: Any, exit_status: Any
-    ) -> dict[str, Any] | None:
+    def check_zwterminateprocess(self, state: SimState, process_handle: Any, exit_status: Any) -> dict[str, Any] | None:
         """Check ZwTerminateProcess for arbitrary process termination.
 
         Args:
@@ -246,11 +237,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
         """
         # Check if process handle is tainted or tracked as tainted
         if self._is_tainted(process_handle) or process_handle in self.tainted_handles:
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "zwterminateprocess",
-                str(process_handle)[:20]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "zwterminateprocess", str(process_handle)[:20])
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -270,7 +257,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                     "confidence": "HIGH",
                     "impact": "DoS, security bypass, system instability",
                     "mitigation": "Validate process handles, check permissions",
-                    "windows_specific": "Can terminate protected processes"
+                    "windows_specific": "Can terminate protected processes",
                 },
             )
 
@@ -298,11 +285,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
 
             # Check if requesting dangerous access rights
             if desired_access and self._is_dangerous_access(desired_access):
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "zwopenprocess",
-                    "dangerous"
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "zwopenprocess", "dangerous")
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -321,15 +304,13 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                         "exploitation": "Open handle to any process",
                         "confidence": "HIGH",
                         "impact": "Process manipulation, memory access",
-                        "mitigation": "Validate PIDs and access rights"
+                        "mitigation": "Validate PIDs and access rights",
                     },
                 )
 
         return None
 
-    def check_pslookupprocessbyprocessid(
-        self, state: SimState, process_id: Any, process: Any
-    ) -> dict[str, Any] | None:
+    def check_pslookupprocessbyprocessid(self, state: SimState, process_id: Any, process: Any) -> dict[str, Any] | None:
         """Check PsLookupProcessByProcessId for tainted PIDs.
 
         Args:
@@ -348,11 +329,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
             if process is not None:
                 self.tainted_objects.add(process)
 
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "pslookupprocess",
-                str(process_id)[:20]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "pslookupprocess", str(process_id)[:20])
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -371,7 +348,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                     "confidence": "HIGH",
                     "impact": "Information disclosure, further exploitation",
                     "mitigation": "Validate PIDs before lookup",
-                    "windows_specific": "Can access system process structures"
+                    "windows_specific": "Can access system process structures",
                 },
             )
 
@@ -393,11 +370,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
         """
         # Check if object pointer is tainted or from tainted source
         if self._is_tainted(object_ptr) or object_ptr in self.tainted_objects:
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "obopenobject",
-                str(object_ptr)[:20]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "obopenobject", str(object_ptr)[:20])
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -417,7 +390,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                     "confidence": "HIGH",
                     "impact": "Object manipulation, privilege escalation",
                     "mitigation": "Validate object pointers",
-                    "windows_specific": "Can access protected objects"
+                    "windows_specific": "Can access protected objects",
                 },
             )
 
@@ -442,11 +415,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
 
         for struct in critical_structures:
             if struct in addr_str:
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "kernel_struct_write",
-                    struct
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "kernel_struct_write", struct)
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -465,7 +434,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                         "exploitation": "Direct privilege escalation",
                         "confidence": "HIGH",
                         "impact": "Full system compromise",
-                        "mitigation": "Prevent writes to kernel structures"
+                        "mitigation": "Prevent writes to kernel structures",
                     },
                 )
 
@@ -484,10 +453,7 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
             return False
 
         addr_str = str(address)
-        kernel_structures = [
-            "TOKEN", "EPROCESS", "ETHREAD", "KTHREAD",
-            "DRIVER_OBJECT", "DEVICE_OBJECT", "MDL"
-        ]
+        kernel_structures = ["TOKEN", "EPROCESS", "ETHREAD", "KTHREAD", "DRIVER_OBJECT", "DEVICE_OBJECT", "MDL"]
         return any(struct in addr_str for struct in kernel_structures)
 
     def _is_dangerous_access(self, access_rights: Any) -> bool:
@@ -506,18 +472,13 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
         process_terminate = 0x0001
 
         try:
-            if hasattr(access_rights, 'concrete'):
+            if hasattr(access_rights, "concrete"):
                 rights = access_rights
             else:
                 rights = int(access_rights)
 
             # Check for dangerous combinations
-            dangerous = [
-                process_all_access,
-                process_vm_write,
-                process_create_thread,
-                process_terminate
-            ]
+            dangerous = [process_all_access, process_vm_write, process_create_thread, process_terminate]
 
             for dangerous_right in dangerous:
                 if rights & dangerous_right:
@@ -542,15 +503,12 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
             return False
 
         # Check if symbolic
-        if hasattr(value, 'symbolic') and value.symbolic:
+        if hasattr(value, "symbolic") and value.symbolic:
             return True
 
         # Check if contains user input references
         value_str = str(value)
-        tainted_sources = [
-            'SystemBuffer', 'Type3InputBuffer', 'UserBuffer',
-            'InputBuffer', 'OutputBuffer', 'IRP'
-        ]
+        tainted_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer", "IRP"]
         return any(src in value_str for src in tainted_sources)
 
     def _get_ioctl_code(self, state: SimState) -> str:

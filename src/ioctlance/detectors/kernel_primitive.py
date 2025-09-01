@@ -45,15 +45,16 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
             size = kwargs.get("size", 0)
             if address is not None and value is not None:
                 # Remove address, value, size from kwargs to avoid duplicate argument error
-                filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ['address', 'value', 'size']}
+                filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ["address", "value", "size"]}
                 return self._check_arbitrary_primitive(state, address, value, size, **filtered_kwargs)
         elif event_type == "function_call":
             return self._check_interlocked_operations(state, **kwargs)
 
         return None
 
-    def _check_arbitrary_primitive(self, state: SimState, address: Any, value: Any,
-                                  size: int, **kwargs: Any) -> dict[str, Any] | None:
+    def _check_arbitrary_primitive(
+        self, state: SimState, address: Any, value: Any, size: int, **kwargs: Any
+    ) -> dict[str, Any] | None:
         """Check for arbitrary increment/decrement primitives.
 
         Args:
@@ -88,8 +89,9 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
 
         return None
 
-    def _check_interlocked_operations(self, state: SimState, function_name: str,
-                                     **kwargs: Any) -> dict[str, Any] | None:
+    def _check_interlocked_operations(
+        self, state: SimState, function_name: str, **kwargs: Any
+    ) -> dict[str, Any] | None:
         """Check for vulnerable interlocked operations.
 
         Args:
@@ -100,12 +102,18 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
             Vulnerability info if found, None otherwise
         """
         interlocked_functions = {
-            "InterlockedIncrement", "InterlockedDecrement",
-            "InterlockedAdd", "InterlockedExchange",
-            "InterlockedCompareExchange", "InterlockedOr",
-            "InterlockedAnd", "InterlockedXor",
-            "_InterlockedIncrement", "_InterlockedDecrement",
-            "_InterlockedAdd", "_InterlockedExchange"
+            "InterlockedIncrement",
+            "InterlockedDecrement",
+            "InterlockedAdd",
+            "InterlockedExchange",
+            "InterlockedCompareExchange",
+            "InterlockedOr",
+            "InterlockedAnd",
+            "InterlockedXor",
+            "_InterlockedIncrement",
+            "_InterlockedDecrement",
+            "_InterlockedAdd",
+            "_InterlockedExchange",
         }
 
         if function_name not in interlocked_functions:
@@ -113,9 +121,9 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
 
         try:
             # Check if target address is user-controlled
-            if hasattr(state.regs, 'rcx'):
+            if hasattr(state.regs, "rcx"):
                 target_addr = state.regs.rcx  # First argument in x64
-            elif hasattr(state.regs, 'rdi'):
+            elif hasattr(state.regs, "rdi"):
                 target_addr = state.regs.rdi  # First argument in System V
             else:
                 return None
@@ -153,7 +161,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
                     return "decrement"
 
             # Track this operation for future comparison
-            if hasattr(address, 'concrete'):
+            if hasattr(address, "concrete"):
                 concrete_addr = state.solver.eval(address)
                 self.tracked_operations[concrete_addr] = value
 
@@ -174,15 +182,15 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
             Type of bit operation or None
         """
         try:
-            if hasattr(value, 'op'):
+            if hasattr(value, "op"):
                 # Check for OR operation
-                if value.op == 'Or':
+                if value.op == "Or":
                     return "arbitrary_or"
                 # Check for AND operation
-                elif value.op == 'And':
+                elif value.op == "And":
                     return "arbitrary_and"
                 # Check for XOR operation
-                elif value.op == 'Xor':
+                elif value.op == "Xor":
                     return "arbitrary_xor"
         except:
             pass
@@ -201,7 +209,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
         """
         try:
             # Check symbolic expressions
-            if hasattr(new_value, 'op') and new_value.op == 'Add':
+            if hasattr(new_value, "op") and new_value.op == "Add":
                 # Check if it's prev + 1 or prev + small_value
                 if len(new_value.args) == 2:
                     arg1, arg2 = new_value.args
@@ -224,7 +232,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
         """
         try:
             # Check symbolic expressions
-            if hasattr(new_value, 'op') and new_value.op == 'Sub':
+            if hasattr(new_value, "op") and new_value.op == "Sub":
                 # Check if it's prev - 1 or prev - small_value
                 if len(new_value.args) == 2:
                     arg1, arg2 = new_value.args
@@ -235,8 +243,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
 
         return False
 
-    def _is_exploitable_primitive(self, state: SimState, address: Any,
-                                 value: Any, primitive_type: str) -> bool:
+    def _is_exploitable_primitive(self, state: SimState, address: Any, value: Any, primitive_type: str) -> bool:
         """Check if the primitive is exploitable.
 
         Args:
@@ -309,16 +316,15 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
             return False
 
         # Check for symbolic variables from user input
-        if hasattr(value, 'symbolic') and value.symbolic:
+        if hasattr(value, "symbolic") and value.symbolic:
             for var in value.variables:
                 var_name = str(var).lower()
-                if 'input' in var_name or 'buffer' in var_name or 'ioctl' in var_name:
+                if "input" in var_name or "buffer" in var_name or "ioctl" in var_name:
                     return True
 
         return False
 
-    def _create_primitive_vuln(self, state: SimState, address: Any,
-                              value: Any, primitive_type: str) -> dict[str, Any]:
+    def _create_primitive_vuln(self, state: SimState, address: Any, value: Any, primitive_type: str) -> dict[str, Any]:
         """Create kernel primitive vulnerability info.
 
         Args:
@@ -330,11 +336,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
         Returns:
             Vulnerability information
         """
-        vuln_key = (
-            state.addr if hasattr(state, 'addr') else 0,
-            primitive_type,
-            str(address)[:30]
-        )
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, primitive_type, str(address)[:30])
 
         if vuln_key in self.detected_vulns:
             return None
@@ -357,12 +359,13 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
                 "type": primitive_type,
                 "address": str(address)[:100],
                 "value": str(value)[:100],
-                "exploitable": "YES"
-            }
+                "exploitable": "YES",
+            },
         )
 
-    def _create_interlocked_vuln(self, state: SimState, function_name: str,
-                                target_addr: Any, operation: str) -> dict[str, Any]:
+    def _create_interlocked_vuln(
+        self, state: SimState, function_name: str, target_addr: Any, operation: str
+    ) -> dict[str, Any]:
         """Create interlocked operation vulnerability info.
 
         Args:
@@ -374,11 +377,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
         Returns:
             Vulnerability information
         """
-        vuln_key = (
-            state.addr if hasattr(state, 'addr') else 0,
-            "interlocked_" + operation,
-            function_name
-        )
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "interlocked_" + operation, function_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -393,8 +392,8 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
                 "function": function_name,
                 "operation": operation,
                 "target_address": str(target_addr)[:100],
-                "exploitable": "YES"
-            }
+                "exploitable": "YES",
+            },
         )
 
 

@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class MemoryState(Enum):
     """State of a memory region."""
+
     ALLOCATED = "allocated"
     FREED = "freed"
     REFERENCED = "referenced"
@@ -29,6 +30,7 @@ class MemoryState(Enum):
 @dataclass
 class MemoryRegion:
     """Represents a tracked memory region."""
+
     address: int
     size: int
     pool_tag: str | None = None
@@ -47,6 +49,7 @@ class MemoryRegion:
 @dataclass
 class MemoryAccess:
     """Represents a memory access event."""
+
     address: int
     size: int
     is_write: bool
@@ -73,13 +76,10 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
     name = "unified_memory"
 
     # Windows pool tags we commonly see
-    COMMON_POOL_TAGS = {'File', 'Devi', 'Thre', 'Proc', 'Driv', 'IoCt'}
+    COMMON_POOL_TAGS = {"File", "Devi", "Thre", "Proc", "Driv", "IoCt"}
 
     # Object types in Windows kernel
-    OBJECT_TYPES = {
-        'FILE_OBJECT', 'DEVICE_OBJECT', 'DRIVER_OBJECT',
-        'ETHREAD', 'EPROCESS', 'KEVENT', 'KMUTEX'
-    }
+    OBJECT_TYPES = {"FILE_OBJECT", "DEVICE_OBJECT", "DRIVER_OBJECT", "ETHREAD", "EPROCESS", "KEVENT", "KMUTEX"}
 
     @property
     def description(self) -> str:
@@ -136,8 +136,9 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
 
     def check_exallocatepool(self, state: SimState, pool_type: Any, size: Any, tag: Any = None) -> Any:
         """Compatibility method for ExAllocatePool hooks."""
-        return self._handle_allocation(state, "ExAllocatePoolWithTag" if tag else "ExAllocatePool",
-                                       pool_type=pool_type, size=size, tag=tag)
+        return self._handle_allocation(
+            state, "ExAllocatePoolWithTag" if tag else "ExAllocatePool", pool_type=pool_type, size=size, tag=tag
+        )
 
     def _check_memory_access(self, state: SimState, event_type: str, **kwargs: Any) -> dict[str, Any] | None:
         """Check memory access for use-after-free and null pointer dereferences."""
@@ -162,9 +163,9 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
             address=concrete_addr,
             size=self._make_concrete(state, size) or 1,
             is_write=(event_type == "mem_write"),
-            site=state.addr if hasattr(state, 'addr') else 0,
-            path_depth=len(state.history.bbl_addrs) if hasattr(state, 'history') else 0,
-            ioctl_code=self._get_ioctl_code(state)
+            site=state.addr if hasattr(state, "addr") else 0,
+            path_depth=len(state.history.bbl_addrs) if hasattr(state, "history") else 0,
+            ioctl_code=self._get_ioctl_code(state),
         )
 
         self.access_history.append(access)
@@ -187,23 +188,23 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         func_lower = func_name.lower()
 
         # Allocation functions
-        if 'exallocatepool' in func_lower:
+        if "exallocatepool" in func_lower:
             return self._handle_allocation(state, func_name, **kwargs)
 
         # Free functions
-        elif 'exfreepool' in func_lower:
+        elif "exfreepool" in func_lower:
             return self._handle_free(state, func_name, **kwargs)
 
         # Reference counting
-        elif 'obreference' in func_lower:
+        elif "obreference" in func_lower:
             return self._handle_reference(state, func_name, **kwargs)
-        elif 'obdereference' in func_lower:
+        elif "obdereference" in func_lower:
             return self._handle_dereference(state, func_name, **kwargs)
 
         # Other memory functions
-        elif 'rtlfreeheap' in func_lower:
+        elif "rtlfreeheap" in func_lower:
             return self._handle_heap_free(state, **kwargs)
-        elif 'mmfreecontiguous' in func_lower:
+        elif "mmfreecontiguous" in func_lower:
             return self._handle_contiguous_free(state, **kwargs)
 
         return None
@@ -226,9 +227,9 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
             size=concrete_size,
             pool_tag=pool_tag,
             state=MemoryState.ALLOCATED,
-            allocation_site=state.addr if hasattr(state, 'addr') else 0,
-            allocation_path_depth=len(state.history.bbl_addrs) if hasattr(state, 'history') else 0,
-            is_object=False
+            allocation_site=state.addr if hasattr(state, "addr") else 0,
+            allocation_path_depth=len(state.history.bbl_addrs) if hasattr(state, "history") else 0,
+            is_object=False,
         )
 
         self.memory_regions[alloc_addr] = region
@@ -236,7 +237,6 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         # Track pool tag statistics
         if pool_tag:
             self.pool_tag_stats[pool_tag] += 1
-
 
         return None
 
@@ -274,9 +274,9 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 size=0,  # Unknown size
                 pool_tag=self._extract_pool_tag(tag) if tag else None,
                 state=MemoryState.FREED,
-                free_site=state.addr if hasattr(state, 'addr') else 0,
+                free_site=state.addr if hasattr(state, "addr") else 0,
                 allocation_site=0,  # Unknown
-                allocation_path_depth=0
+                allocation_path_depth=0,
             )
             self.freed_regions[concrete_addr] = region
             return None
@@ -292,10 +292,9 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
 
         # Move to freed regions
         region.state = MemoryState.FREED
-        region.free_site = state.addr if hasattr(state, 'addr') else 0
+        region.free_site = state.addr if hasattr(state, "addr") else 0
         self.freed_regions[concrete_addr] = region
         del self.memory_regions[concrete_addr]
-
 
         return None
 
@@ -339,16 +338,15 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 address=concrete_addr,
                 size=0x100,  # Default object size
                 state=MemoryState.REFERENCED,
-                allocation_site=state.addr if hasattr(state, 'addr') else 0,
+                allocation_site=state.addr if hasattr(state, "addr") else 0,
                 reference_count=1,
                 is_object=True,
-                object_type=self._infer_object_type(state, obj_ptr)
+                object_type=self._infer_object_type(state, obj_ptr),
             )
             self.memory_regions[concrete_addr] = region
         else:
             # Increment reference count
             self.memory_regions[concrete_addr].reference_count += 1
-
 
         return None
 
@@ -386,7 +384,6 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         # Decrement reference count
         region.reference_count -= 1
 
-
         # Check for reference count issues
         if region.reference_count < 0:
             return self._create_refcount_underflow_vuln(state, concrete_addr, region)
@@ -396,7 +393,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
             if region.is_temporary:
                 # Move to freed regions
                 region.state = MemoryState.FREED
-                region.free_site = state.addr if hasattr(state, 'addr') else 0
+                region.free_site = state.addr if hasattr(state, "addr") else 0
                 self.freed_regions[concrete_addr] = region
                 del self.memory_regions[concrete_addr]
         elif region.reference_count < 0:
@@ -437,7 +434,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "size": region.size,
                 "pool_tag": region.pool_tag or "none",
                 "first_free_site": hex(region.free_site) if region.free_site else "unknown",
-                "second_free_site": hex(state.addr) if hasattr(state, 'addr') else "unknown",
+                "second_free_site": hex(state.addr) if hasattr(state, "addr") else "unknown",
                 "allocation_site": hex(region.allocation_site) if region.allocation_site else "unknown",
                 "ioctl_code": self._get_ioctl_code(state),
             },
@@ -445,8 +442,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "severity": "CRITICAL",
                 "exploitation": "Heap corruption, potential RCE",
                 "confidence": "HIGH" if region.pool_tag else "MEDIUM",
-                "windows_specific": "Can trigger KERNEL_MODE_HEAP_CORRUPTION (0x13A)"
-            }
+                "windows_specific": "Can trigger KERNEL_MODE_HEAP_CORRUPTION (0x13A)",
+            },
         )
 
     def _create_use_after_free_vuln(
@@ -455,7 +452,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         address: int,
         region: MemoryRegion,
         access: MemoryAccess | None = None,
-        is_range: bool = False
+        is_range: bool = False,
     ) -> dict[str, Any]:
         """Create use-after-free vulnerability info."""
         vuln_key = (state.addr, "use_after_free", str(address))
@@ -487,8 +484,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "severity": "CRITICAL",
                 "exploitation": "Code execution via freed object reuse",
                 "confidence": "HIGH",
-                "windows_specific": "Can be exploited via pool spraying"
-            }
+                "windows_specific": "Can be exploited via pool spraying",
+            },
         )
 
     def _create_refcount_underflow_vuln(self, state: SimState, address: int, region: MemoryRegion) -> dict[str, Any]:
@@ -512,13 +509,13 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "severity": "HIGH",
                 "exploitation": "Object lifetime manipulation, UAF",
                 "confidence": "HIGH",
-                "windows_specific": "Violates Windows object lifecycle rules"
-            }
+                "windows_specific": "Violates Windows object lifecycle rules",
+            },
         )
 
     def _create_tainted_free_vuln(self, state: SimState, pool_ptr: Any) -> dict[str, Any]:
         """Create tainted/arbitrary free vulnerability."""
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, "tainted_free", str(pool_ptr)[:20])
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, "tainted_free", str(pool_ptr)[:20])
         if vuln_key in self.detected_vulns:
             return None
         self.detected_vulns.add(vuln_key)
@@ -551,8 +548,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "exploitation": "Arbitrary memory corruption, pool metadata corruption",
                 "confidence": confidence,
                 "windows_specific": "Can trigger BAD_POOL_CALLER (0xC2) or KERNEL_MODE_HEAP_CORRUPTION (0x13A)",
-                "cwe": "CWE-415: Double Free" if is_tainted else "CWE-590: Free of Memory not on the Heap"
-            }
+                "cwe": "CWE-415: Double Free" if is_tainted else "CWE-590: Free of Memory not on the Heap",
+            },
         )
 
     def _create_tag_mismatch_vuln(self, state: SimState, address: int, alloc_tag: str, free_tag: str) -> dict[str, Any]:
@@ -576,8 +573,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "severity": "MEDIUM",
                 "exploitation": "Pool corruption, debugging issues",
                 "confidence": "HIGH",
-                "windows_specific": "Violates Windows pool tagging conventions"
-            }
+                "windows_specific": "Violates Windows pool tagging conventions",
+            },
         )
 
     def _create_type_confusion_vuln(self, state: SimState, address: int, region: MemoryRegion) -> dict[str, Any]:
@@ -602,8 +599,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 "severity": "HIGH",
                 "exploitation": "Memory corruption, potential RCE",
                 "confidence": "MEDIUM",
-                "windows_specific": "Mixing pool and object manager APIs"
-            }
+                "windows_specific": "Mixing pool and object manager APIs",
+            },
         )
 
     # Helper methods
@@ -615,7 +612,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         if isinstance(value, int):
             return value
         # Try to evaluate symbolic values
-        if hasattr(state, 'solver'):
+        if hasattr(state, "solver"):
             try:
                 # Try to evaluate with the solver
                 return state.solver.eval_one(value)
@@ -643,7 +640,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
             # Found target pattern in address
 
             # Extract base address
-            asts = [i for i in address.children_asts()] if hasattr(address, 'children_asts') else []
+            asts = [i for i in address.children_asts()] if hasattr(address, "children_asts") else []
             target_base = asts[0] if len(asts) > 1 else address
 
             # Check if already validated
@@ -652,7 +649,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                 continue
 
             # Only check if single variable
-            if hasattr(address, 'variables') and len(address.variables) != 1:
+            if hasattr(address, "variables") and len(address.variables) != 1:
                 continue
 
             # Create a test state
@@ -673,11 +670,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                     satisfiable = tmp_state.satisfiable()
                     # Check if null pointer is satisfiable
                     if satisfiable is True:
-                        vuln_key = (
-                            state.addr if hasattr(state, 'addr') else 0,
-                            "null_pointer",
-                            target
-                        )
+                        vuln_key = (state.addr if hasattr(state, "addr") else 0, "null_pointer", target)
                         if vuln_key in self.detected_vulns:
                             return None
                         self.detected_vulns.add(vuln_key)
@@ -698,19 +691,15 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                                 "exploitation": "Denial of service, potential code execution",
                                 "confidence": "HIGH",
                                 "mitigation": "Check buffer pointers before use",
-                                "windows_specific": "Can trigger BSOD with PAGE_FAULT_IN_NONPAGED_AREA"
-                            }
+                                "windows_specific": "Can trigger BSOD with PAGE_FAULT_IN_NONPAGED_AREA",
+                            },
                         )
 
             # Check for null pointer in allocated memory or other buffers
             elif "+" not in addr_str or target in ["Type3InputBuffer", "UserBuffer"]:
                 tmp_state.solver.add(address == 0)
                 if tmp_state.satisfiable():
-                    vuln_key = (
-                        state.addr if hasattr(state, 'addr') else 0,
-                        "null_pointer_deref",
-                        addr_str[:30]
-                    )
+                    vuln_key = (state.addr if hasattr(state, "addr") else 0, "null_pointer_deref", addr_str[:30])
                     if vuln_key in self.detected_vulns:
                         return None
                     self.detected_vulns.add(vuln_key)
@@ -727,15 +716,15 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
                             "severity": "HIGH",
                             "exploitation": "System crash, potential privilege escalation",
                             "confidence": "HIGH",
-                            "mitigation": "Validate pointers before dereference"
-                        }
+                            "mitigation": "Validate pointers before dereference",
+                        },
                     )
 
         return None
 
     def _is_symbolic(self, value: Any) -> bool:
         """Check if value is symbolic."""
-        if hasattr(value, 'symbolic'):
+        if hasattr(value, "symbolic"):
             return value.symbolic
         return False
 
@@ -747,10 +736,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
 
         # Check if value contains references to user buffers
         value_str = str(value)
-        user_sources = [
-            "SystemBuffer", "Type3InputBuffer", "UserBuffer",
-            "input_buffer", "user_buffer", "InputBuffer"
-        ]
+        user_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "input_buffer", "user_buffer", "InputBuffer"]
 
         for source in user_sources:
             if source in value_str:
@@ -759,7 +745,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         # Check if it's a symbolic value derived from IOCTL input
         if self._is_symbolic(value):
             # Check if any of its variables are from user input
-            if hasattr(value, 'variables'):
+            if hasattr(value, "variables"):
                 for var in value.variables:
                     var_str = str(var)
                     for source in user_sources:
@@ -776,7 +762,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
             return tag[:4]  # Pool tags are 4 bytes
         if isinstance(tag, int):
             # Convert int to 4-byte string
-            return tag.to_bytes(4, 'little').decode('ascii', errors='ignore')[:4]
+            return tag.to_bytes(4, "little").decode("ascii", errors="ignore")[:4]
         return str(tag)[:4]
 
     def _generate_allocation_address(self, state: SimState) -> int:
@@ -795,7 +781,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
 
     def _get_ioctl_code(self, state: SimState) -> str:
         """Get current IOCTL code."""
-        if hasattr(self.context, 'io_control_code'):
+        if hasattr(self.context, "io_control_code"):
             try:
                 ioctl = state.solver.eval_one(self.context.io_control_code)
                 return hex(ioctl)

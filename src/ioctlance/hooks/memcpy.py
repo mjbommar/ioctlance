@@ -47,7 +47,8 @@ class MemcpyHook(angr.SimProcedure):
             vuln_info = {
                 "title": f"{'Destination' if dst_tainted else 'Source'} Controllable - memcpy",
                 "description": f"User controls {'destination' if dst_tainted else 'source'} address in memcpy",
-                "state": str(self.state),
+                "state": self.state,  # Pass the actual state object
+                "state_str": str(self.state),  # Keep string version for backward compatibility
                 "eval": {
                     "dst": str(dst)[:100],
                     "src": str(src)[:100],
@@ -132,7 +133,8 @@ class MemcpyHook(angr.SimProcedure):
                         vuln_info = {
                             "title": "Stack Buffer Overflow - memcpy",
                             "description": f"memcpy to stack with {'symbolic' if is_symbolic_size else 'large'} size",
-                            "state": str(self.state),
+                            "state": self.state,  # Pass the actual state object
+                            "state_str": str(self.state),  # Keep string version for backward compatibility
                             "eval": {
                                 "dst": hex(dst_concrete),
                                 "size": str(size),

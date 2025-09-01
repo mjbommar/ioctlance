@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import sys
+import time
 from pathlib import Path
 
 # Configure logging
@@ -70,6 +71,20 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
 
     parser.add_argument("--json", action="store_true", help="Output results as JSON to stdout")
+
+    parser.add_argument(
+        "--format",
+        choices=["json", "jsonl", "markdown", "html", "csv", "sarif"],
+        default="json",
+        help="Output format for results",
+    )
+
+    parser.add_argument(
+        "--output-level",
+        choices=["quiet", "normal", "verbose", "debug", "full"],
+        default="normal",
+        help="Output detail level",
+    )
 
     parser.add_argument("--version", action="version", version="%(prog)s 0.2.0")
 
@@ -149,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
             # Create configuration from CLI arguments
             from ioctlance.core.analysis_context import AnalysisConfig, AnalysisContext
             from ioctlance.core.driver_analyzer import DriverAnalyzer
+            from ioctlance.output import OutputManager, OutputFormat, OutputLevel
 
             config_kwargs = {
                 "timeout": args.timeout,
@@ -168,11 +184,24 @@ def main(argv: list[str] | None = None) -> int:
 
             # Create config and context with all parameters
             config = AnalysisConfig(**config_kwargs)
-            context = AnalysisContext.create_for_driver(driver_file, config)
+
+            # Create output manager
+            output_format = OutputFormat.JSON if args.json else OutputFormat[args.format.upper()]
+            output_level = OutputLevel[args.output_level.upper()]
+            output_manager = OutputManager(
+                output_level=output_level,
+                output_format=output_format,
+                dedup_vulnerabilities=True,
+                capture_raw_state=(output_level.value >= OutputLevel.DEBUG.value),
+            )
+
+            context = AnalysisContext.create_for_driver(driver_file, config, output_manager=output_manager)
 
             # Run analysis
+            start_time = time.time()
             analyzer = DriverAnalyzer(context)
             result = analyzer.analyze()
+            analysis_time = time.time() - start_time
 
             # Display results (unless in JSON mode)
             if not args.json:
@@ -198,8 +227,18 @@ def main(argv: list[str] | None = None) -> int:
                     for error in result.error:
                         logger.debug(f"Error: {error}")
 
-            # Store result - use model_dump_json to handle datetime serialization
-            all_results.append({"driver": str(driver_file), "result": json.loads(result.model_dump_json())})
+            # Create unified result if output manager is available
+            if context.output_manager:
+                unified_result = context.output_manager.create_result(
+                    analysis_time=analysis_time, errors=result.error if result.error else []
+                )
+                # Store the result with the output manager for formatting
+                all_results.append(
+                    {"driver": str(driver_file), "result": unified_result, "output_manager": context.output_manager}
+                )
+            else:
+                # Fallback to original format
+                all_results.append({"driver": str(driver_file), "result": json.loads(result.model_dump_json())})
 
         except KeyboardInterrupt:
             logger.error("\nAnalysis interrupted by user")
@@ -218,27 +257,65 @@ def main(argv: list[str] | None = None) -> int:
     if args.json or args.output:
         # Prepare output data
         if len(driver_files) > 1:
-            output_data = {
-                "drivers_analyzed": len(driver_files),
-                "drivers_failed": len(failed_drivers),
-                "results": all_results,
-                "failed": failed_drivers,
-            }
+            # Batch mode - multiple files
+            if args.json or args.format == "json":
+                output_data = {
+                    "drivers_analyzed": len(driver_files),
+                    "drivers_failed": len(failed_drivers),
+                    "results": [
+                        {
+                            "driver": r["driver"],
+                            "result": json.loads(r["result"].model_dump_json())
+                            if hasattr(r["result"], "model_dump_json")
+                            else r["result"],
+                        }
+                        for r in all_results
+                    ],
+                    "failed": failed_drivers,
+                }
+            else:
+                # For non-JSON formats in batch mode, concatenate formatted results
+                output_parts = []
+                for r in all_results:
+                    if "output_manager" in r:
+                        formatted = r["output_manager"].format_output(r["result"])
+                        output_parts.append(f"# Driver: {r['driver']}\n\n{formatted}")
+                output_data = "\n\n---\n\n".join(output_parts)
         else:
-            # Single file - save just the result
-            output_data = all_results[0]["result"] if all_results else {}
+            # Single file - format appropriately
+            if all_results:
+                if "output_manager" in all_results[0]:
+                    # Use output manager to format
+                    output_manager = all_results[0]["output_manager"]
+                    unified_result = all_results[0]["result"]
+
+                    if args.json:
+                        output_data = json.loads(unified_result.model_dump_json())
+                    else:
+                        output_data = output_manager.format_output(unified_result)
+                else:
+                    # Fallback to dict format
+                    output_data = all_results[0]["result"]
+            else:
+                output_data = {}
 
         # Output to file if requested
         if args.output:
             output_path = Path(args.output)
             with open(output_path, "w") as f:
-                json.dump(output_data, f, indent=2)
+                if isinstance(output_data, str):
+                    f.write(output_data)
+                else:
+                    json.dump(output_data, f, indent=2)
             if not args.json:
                 logger.info(f"Results saved to: {output_path}")
 
         # Output to stdout if JSON mode
         if args.json:
-            print(json.dumps(output_data, indent=2))
+            if isinstance(output_data, str):
+                print(output_data)
+            else:
+                print(json.dumps(output_data, indent=2))
 
     # Summary for batch mode
     if len(driver_files) > 1:

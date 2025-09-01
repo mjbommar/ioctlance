@@ -2,13 +2,17 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import angr
 from angr.calling_conventions import SimCC
 
 # Import kernel types to ensure they're registered with angr
 from ..symbolic import kernel_types  # noqa: F401
+
+if TYPE_CHECKING:
+    from angr import SimState
+    from ..output.manager import OutputManager
 
 
 @dataclass
@@ -97,13 +101,19 @@ class AnalysisContext:
     # Vulnerability detectors
     detectors: list[Any] = field(default_factory=list)
 
+    # Unified output manager (optional, for enhanced output)
+    output_manager: Any | None = None  # OutputManager
+
     @classmethod
-    def create_for_driver(cls, driver_path: Path | str, config: AnalysisConfig | None = None) -> "AnalysisContext":
+    def create_for_driver(
+        cls, driver_path: Path | str, config: AnalysisConfig | None = None, output_manager: Any | None = None
+    ) -> "AnalysisContext":
         """Create analysis context for a driver file.
 
         Args:
             driver_path: Path to the driver file
             config: Analysis configuration (uses defaults if None)
+            output_manager: Output manager for enhanced output (optional)
 
         Returns:
             Configured analysis context
@@ -145,7 +155,12 @@ class AnalysisContext:
             calling_convention=calling_convention,
             config=config,
             driver_path=path,
+            output_manager=output_manager,
         )
+
+        # Initialize output manager if provided
+        if output_manager:
+            output_manager.initialize(path, config.__dict__)
 
         # Register all kernel API hooks
         from ..hooks import register_all_hooks
@@ -176,6 +191,29 @@ class AnalysisContext:
         Args:
             vuln_info: Vulnerability information dictionary
         """
+        # Use enhanced reporting if output manager is available
+        if self.output_manager:
+            state = vuln_info.get("state")
+            # Check if state is a SimState object (has solver attribute)
+            if state and hasattr(state, "solver"):
+                # State is a SimState - pass it directly
+                enhanced_vuln = self.output_manager.add_vulnerability(
+                    title=vuln_info.get("title", "Unknown vulnerability"),
+                    description=vuln_info.get("description", ""),
+                    state=state,
+                    context=self,
+                    parameters=vuln_info.get("parameters", {}),
+                    others=vuln_info.get("others", {}),
+                )
+                vuln_info["enhanced"] = enhanced_vuln
+            else:
+                # State is not a SimState (might be string or None)
+                # Log warning but don't fail
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Vulnerability added without SimState: {vuln_info.get('title')}")
+
         self.vulnerabilities.append(vuln_info)
         # Buffer the vulnerability title for summary
         if "title" in vuln_info:

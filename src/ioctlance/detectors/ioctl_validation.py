@@ -71,9 +71,9 @@ class IOCTLValidationDetector(VulnerabilityDetector):
 
     # Expected IOCTL ranges for common drivers
     COMMON_DEVICE_TYPES = {
-        0x22,   # FILE_DEVICE_UNKNOWN (custom drivers)
-        0x8000, # Custom device type range start
-        0x9000, # Common custom range
+        0x22,  # FILE_DEVICE_UNKNOWN (custom drivers)
+        0x8000,  # Custom device type range start
+        0x9000,  # Common custom range
     }
 
     @property
@@ -140,12 +140,12 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                 "input_buffer_checked": False,
                 "output_buffer_checked": False,
                 "size_validated": False,
-                "first_seen": state.addr if hasattr(state, 'addr') else 0,
+                "first_seen": state.addr if hasattr(state, "addr") else 0,
             }
 
         # Check for invalid device type
         if decoded["device_type"] == 0 or decoded["device_type"] > 0xFFFF:
-            vuln_key = (state.addr if hasattr(state, 'addr') else 0, "invalid_device", hex(ioctl_code))
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "invalid_device", hex(ioctl_code))
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -163,15 +163,15 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                     "severity": "LOW",
                     "exploitation": "May indicate fuzzing or malformed input",
                     "confidence": "HIGH",
-                    "mitigation": "Validate IOCTL code ranges"
-                }
+                    "mitigation": "Validate IOCTL code ranges",
+                },
             )
 
         # Check for METHOD_NEITHER without proper validation
         if decoded["method"] == METHOD_NEITHER:
             # METHOD_NEITHER is dangerous - direct user pointers
             if not self._has_probe_validation(state):
-                vuln_key = (state.addr if hasattr(state, 'addr') else 0, "method_neither", hex(ioctl_code))
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "method_neither", hex(ioctl_code))
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -190,13 +190,13 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                         "exploitation": "Direct user pointer access without validation",
                         "confidence": "HIGH",
                         "mitigation": "Use ProbeForRead/Write or switch to METHOD_BUFFERED",
-                        "windows_specific": "Can bypass kernel memory protections"
-                    }
+                        "windows_specific": "Can bypass kernel memory protections",
+                    },
                 )
 
         # Check for suspicious function codes
         if decoded["function"] == 0 or decoded["function"] == 0xFFF:
-            vuln_key = (state.addr if hasattr(state, 'addr') else 0, "suspicious_function", hex(ioctl_code))
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "suspicious_function", hex(ioctl_code))
             if vuln_key in self.detected_vulns:
                 return None
             self.detected_vulns.add(vuln_key)
@@ -213,8 +213,8 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                     "severity": "LOW",
                     "exploitation": "May indicate testing/debug code",
                     "confidence": "MEDIUM",
-                    "mitigation": "Review IOCTL function codes"
-                }
+                    "mitigation": "Review IOCTL function codes",
+                },
             )
 
         return None
@@ -250,11 +250,7 @@ class IOCTLValidationDetector(VulnerabilityDetector):
             if self._is_symbolic(size):
                 # Check if size was validated
                 if not ioctl_info["size_validated"]:
-                    vuln_key = (
-                        state.addr if hasattr(state, 'addr') else 0,
-                        "unvalidated_size",
-                        hex(ioctl_code)
-                    )
+                    vuln_key = (state.addr if hasattr(state, "addr") else 0, "unvalidated_size", hex(ioctl_code))
                     if vuln_key in self.detected_vulns:
                         return None
                     self.detected_vulns.add(vuln_key)
@@ -273,8 +269,8 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                             "severity": "HIGH",
                             "exploitation": "Buffer overflow via controlled size",
                             "confidence": "HIGH",
-                            "mitigation": "Validate buffer sizes before use"
-                        }
+                            "mitigation": "Validate buffer sizes before use",
+                        },
                     )
 
             # Track that buffers are being accessed
@@ -286,15 +282,11 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         # Check for size mismatches in METHOD_BUFFERED
         if decoded["method"] == METHOD_BUFFERED:
             # Check if size exceeds expected buffer sizes
-            if hasattr(self.context, 'input_buffer_length') and self.context.input_buffer_length:
+            if hasattr(self.context, "input_buffer_length") and self.context.input_buffer_length:
                 try:
                     max_input = state.solver.max(self.context.input_buffer_length)
                     if isinstance(size, int) and size > max_input:
-                        vuln_key = (
-                            state.addr if hasattr(state, 'addr') else 0,
-                            "size_mismatch",
-                            hex(ioctl_code)
-                        )
+                        vuln_key = (state.addr if hasattr(state, "addr") else 0, "size_mismatch", hex(ioctl_code))
                         if vuln_key in self.detected_vulns:
                             return None
                         self.detected_vulns.add(vuln_key)
@@ -312,8 +304,8 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                                 "severity": "HIGH",
                                 "exploitation": "Buffer overflow",
                                 "confidence": "HIGH",
-                                "mitigation": "Check buffer bounds"
-                            }
+                                "mitigation": "Check buffer bounds",
+                            },
                         )
                 except:
                     pass
@@ -340,11 +332,7 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         # Check if input was never validated for METHOD_NEITHER
         if decoded["method"] == METHOD_NEITHER:
             if not ioctl_info["input_buffer_checked"] and decoded["access"] in (FILE_READ_ACCESS, FILE_ANY_ACCESS):
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "no_input_validation",
-                    hex(ioctl_code)
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "no_input_validation", hex(ioctl_code))
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -362,8 +350,8 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                         "severity": "MEDIUM",
                         "exploitation": "Unvalidated user input processing",
                         "confidence": "MEDIUM",
-                        "mitigation": "Add input validation"
-                    }
+                        "mitigation": "Add input validation",
+                    },
                 )
 
         # Mark IOCTL as validated for next time
@@ -381,11 +369,11 @@ class IOCTLValidationDetector(VulnerabilityDetector):
             True if ProbeForRead/Write was called
         """
         # Check if ProbeForRead or ProbeForWrite was called in this path
-        if hasattr(state, 'history') and hasattr(state.history, 'events'):
+        if hasattr(state, "history") and hasattr(state.history, "events"):
             for event in state.history.events:
-                if hasattr(event, 'type') and event.type == 'call':
-                    if hasattr(event, 'function_name'):
-                        if 'ProbeFor' in event.function_name:
+                if hasattr(event, "type") and event.type == "call":
+                    if hasattr(event, "function_name"):
+                        if "ProbeFor" in event.function_name:
                             return True
         return False
 
@@ -402,7 +390,7 @@ class IOCTLValidationDetector(VulnerabilityDetector):
             return False
 
         addr_str = str(address)
-        user_buffers = ['SystemBuffer', 'Type3InputBuffer', 'UserBuffer', 'InputBuffer', 'OutputBuffer']
+        user_buffers = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer"]
         return any(buf in addr_str for buf in user_buffers)
 
     def _is_symbolic(self, value: Any) -> bool:
@@ -414,7 +402,7 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         Returns:
             True if value is symbolic
         """
-        if hasattr(value, 'symbolic'):
+        if hasattr(value, "symbolic"):
             return value.symbolic
         return False
 
@@ -427,9 +415,9 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         Returns:
             IOCTL code as integer, 0 if not found
         """
-        if hasattr(state, 'globals') and 'IoControlCode' in state.globals:
-            return state.globals['IoControlCode']
-        elif hasattr(self.context, 'io_control_code') and self.context.io_control_code is not None:
+        if hasattr(state, "globals") and "IoControlCode" in state.globals:
+            return state.globals["IoControlCode"]
+        elif hasattr(self.context, "io_control_code") and self.context.io_control_code is not None:
             try:
                 return state.solver.eval_one(self.context.io_control_code)
             except:
@@ -449,7 +437,7 @@ class IOCTLValidationDetector(VulnerabilityDetector):
                 0: "METHOD_BUFFERED",
                 1: "METHOD_IN_DIRECT",
                 2: "METHOD_OUT_DIRECT",
-                3: "METHOD_NEITHER"
+                3: "METHOD_NEITHER",
             }.get(method, f"UNKNOWN_{method}")
             method_counts[method_name] = method_counts.get(method_name, 0) + 1
 

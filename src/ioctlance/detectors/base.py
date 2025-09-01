@@ -129,16 +129,39 @@ class VulnerabilityDetector(ABC):
             # Don't fail vulnerability recording if raw capture fails
             pass
 
-        return {
+        # Compute severity from title if not provided in others
+        severity = (others or {}).get("severity")
+        if not severity:
+            from ..models.vulnerability import Vulnerability
+
+            severity = Vulnerability.compute_severity_from_title(title)
+
+        # Convert state to string immediately while it's still alive
+        state_str = "<SimState @ 0x0>"
+        try:
+            state_str = str(state)
+        except Exception:
+            # State might be a weakproxy that's dead or other issue
+            try:
+                if hasattr(state, "addr"):
+                    state_str = f"<SimState @ {hex(state.addr)}>"
+            except:
+                pass
+
+        vulnerability_info = {
             "title": title,
             "description": description,
-            "state": str(state),
+            "state": state,  # Pass the actual state object
+            "state_str": state_str,  # String version captured while state is alive
             "eval": eval_params,
             "parameters": parameters or {},
             "others": others or {},
             "detector": self.name,
             "raw_data": raw_data,  # Include raw state data
+            "severity": severity,  # Include severity field
         }
+
+        return vulnerability_info
 
 
 class DetectorRegistry:

@@ -155,7 +155,8 @@ class ExplosionDetector(angr.exploration_techniques.ExplorationTechnique):
                         vuln_info = {
                             "title": "Buffer Overflow - Controllable PC",
                             "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
-                            "state": str(state),
+                            "state": state,  # Pass the actual state object
+                            "state_str": str(state),  # Keep string version for backward compatibility
                             "eval": {"IoControlCode": ioctl_code, "pc_symbolic": "True"},
                             "others": {"severity": "CRITICAL", "type": "unconstrained_state"},
                         }

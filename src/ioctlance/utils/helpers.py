@@ -128,7 +128,8 @@ def analyze_object_attributes(
         vuln_info = {
             "title": "ObjectName in ObjectAttributes controllable",
             "description": func_name,
-            "state": str(state),
+            "state": state,  # Pass the actual state object
+            "state_str": str(state),  # Keep string version for backward compatibility
             "parameters": {
                 "ObjectAttributes": {
                     "ObjectName": str(object_name),

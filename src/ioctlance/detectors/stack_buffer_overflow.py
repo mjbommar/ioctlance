@@ -73,7 +73,6 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         if address is None:
             return None
 
-
         # Check if the write is to stack memory
         stack_pointer = state.regs.rsp if hasattr(state.regs, "rsp") else state.regs.sp
 
@@ -96,7 +95,6 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
 
             # Check for various overflow conditions
             vuln = self._check_overflow_conditions(state, addr_concrete, sp_concrete, size, value)
-
 
             if vuln:
                 # Create unique key for deduplication

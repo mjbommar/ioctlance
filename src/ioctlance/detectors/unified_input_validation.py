@@ -134,11 +134,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                     tmp_state.solver.add(tmp_state.inspect.mem_write_address == 0x41414141)
 
                 if tmp_state.satisfiable():
-                    vuln_key = (
-                        state.addr if hasattr(state, 'addr') else 0,
-                        "arbitrary_rw",
-                        f"{event_type}_{target}"
-                    )
+                    vuln_key = (state.addr if hasattr(state, "addr") else 0, "arbitrary_rw", f"{event_type}_{target}")
                     if vuln_key in self.detected_vulns:
                         return None
                     self.detected_vulns.add(vuln_key)
@@ -157,8 +153,8 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                             "severity": "CRITICAL" if event_type == "mem_write" else "HIGH",
                             "exploitation": "Read/write arbitrary kernel memory",
                             "confidence": "HIGH",
-                            "mitigation": "Validate pointers before dereference"
-                        }
+                            "mitigation": "Validate pointers before dereference",
+                        },
                     )
 
             elif target in ("Type3InputBuffer", "UserBuffer"):
@@ -172,9 +168,9 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
 
                 if tmp_state.satisfiable():
                     vuln_key = (
-                        state.addr if hasattr(state, 'addr') else 0,
+                        state.addr if hasattr(state, "addr") else 0,
                         "arbitrary_rw_direct",
-                        f"{event_type}_{target}"
+                        f"{event_type}_{target}",
                     )
                     if vuln_key in self.detected_vulns:
                         return None
@@ -194,8 +190,8 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                             "severity": "CRITICAL",
                             "exploitation": f"Direct kernel memory {event_type[4:]} via {target}",
                             "confidence": "HIGH",
-                            "mitigation": "Use ProbeForRead/Write or METHOD_BUFFERED"
-                        }
+                            "mitigation": "Use ProbeForRead/Write or METHOD_BUFFERED",
+                        },
                     )
 
         return None
@@ -244,11 +240,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                 length_val = int(length) if length is not None else 0
 
             if length_val == 0:
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "probe_zero_length",
-                    "read"
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "probe_zero_length", "read")
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -267,23 +259,21 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                         "exploitation": "Validation bypass allows kernel memory access",
                         "confidence": "HIGH",
                         "reference": "MS08-066",
-                        "mitigation": "Check for zero length before probe"
-                    }
+                        "mitigation": "Check for zero length before probe",
+                    },
                 )
 
             # Track this probe for later comparison
-            self.probed_addresses[state_id].append({
-                "address": address,
-                "length": length,
-                "type": "read"
-            })
+            self.probed_addresses[state_id].append({"address": address, "length": length, "type": "read"})
 
         except Exception as e:
             logger.debug(f"Error checking ProbeForRead: {e}")
 
         return None
 
-    def check_probe_for_write(self, state: SimState, address: Any, length: Any, alignment: Any) -> dict[str, Any] | None:
+    def check_probe_for_write(
+        self, state: SimState, address: Any, length: Any, alignment: Any
+    ) -> dict[str, Any] | None:
         """Public interface for ProbeForWrite checks (for hooks).
 
         Args:
@@ -327,11 +317,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                 length_val = int(length) if length is not None else 0
 
             if length_val == 0:
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "probe_zero_length",
-                    "write"
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "probe_zero_length", "write")
                 if vuln_key in self.detected_vulns:
                     return None
                 self.detected_vulns.add(vuln_key)
@@ -350,8 +336,8 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                         "exploitation": "Write-what-where primitive to kernel memory",
                         "confidence": "HIGH",
                         "reference": "MS08-066, CVE-2023-21768",
-                        "mitigation": "Check for zero length before probe"
-                    }
+                        "mitigation": "Check for zero length before probe",
+                    },
                 )
 
             # Check if address is user-controlled but in kernel space
@@ -361,9 +347,9 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                     # Check if address is in kernel space (high bit set on x64)
                     if addr_val >= 0xFFFF000000000000:
                         vuln_key = (
-                            state.addr if hasattr(state, 'addr') else 0,
+                            state.addr if hasattr(state, "addr") else 0,
                             "probe_kernel_address",
-                            hex(addr_val)[:16]
+                            hex(addr_val)[:16],
                         )
                         if vuln_key in self.detected_vulns:
                             return None
@@ -381,27 +367,21 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                                 "severity": "CRITICAL",
                                 "exploitation": "Direct kernel memory write",
                                 "confidence": "HIGH",
-                                "mitigation": "Validate address is in user space"
-                            }
+                                "mitigation": "Validate address is in user space",
+                            },
                         )
                 except:
                     pass
 
             # Track this probe for later comparison
-            self.probed_addresses[state_id].append({
-                "address": address,
-                "length": length,
-                "type": "write"
-            })
+            self.probed_addresses[state_id].append({"address": address, "length": length, "type": "write"})
 
         except Exception as e:
             logger.debug(f"Error checking ProbeForWrite: {e}")
 
         return None
 
-    def _check_memory_access(
-        self, state: SimState, address: Any, size: Any, is_write: bool
-    ) -> dict[str, Any] | None:
+    def _check_memory_access(self, state: SimState, address: Any, size: Any, is_write: bool) -> dict[str, Any] | None:
         """Check if memory access violates previous probe (from probe_bypass).
 
         Detects size mismatch issues.
@@ -423,11 +403,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                 if self._addresses_match(probe["address"], address):
                     # Check for size mismatch
                     if not self._sizes_match(probe["length"], size):
-                        vuln_key = (
-                            state.addr if hasattr(state, 'addr') else 0,
-                            "probe_size_mismatch",
-                            str(is_write)
-                        )
+                        vuln_key = (state.addr if hasattr(state, "addr") else 0, "probe_size_mismatch", str(is_write))
                         if vuln_key in self.detected_vulns:
                             return None
                         self.detected_vulns.add(vuln_key)
@@ -446,8 +422,8 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                                 "severity": "HIGH",
                                 "exploitation": "Buffer overflow via size mismatch",
                                 "confidence": "HIGH",
-                                "mitigation": "Ensure probe and access sizes match"
-                            }
+                                "mitigation": "Ensure probe and access sizes match",
+                            },
                         )
 
         return None
@@ -527,10 +503,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
 
         # Check string representation for user buffers
         value_str = str(value)
-        tainted_sources = [
-            'SystemBuffer', 'Type3InputBuffer', 'UserBuffer',
-            'InputBuffer', 'OutputBuffer'
-        ]
+        tainted_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer"]
         return any(src in value_str for src in tainted_sources)
 
     def _get_ioctl_code(self, state: SimState) -> str:

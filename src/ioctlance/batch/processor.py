@@ -11,6 +11,8 @@ import multiprocessing
 
 from ..core.analysis_context import AnalysisConfig, AnalysisContext
 from ..core.driver_analyzer import DriverAnalyzer
+from ..output.manager import OutputManager, UnifiedAnalysisResult
+from ..output.formats import OutputFormat, OutputLevel
 from .models import BatchConfig, DriverResult
 from .memory import MemoryMonitor
 from .progress import ProgressTracker
@@ -20,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 def analyze_single_driver(
     driver_path: Path, timeout: int = 120, verbose: bool = False, safe_mode: bool = False, profile: str = "fast"
-) -> dict[str, Any]:
+) -> UnifiedAnalysisResult:
     """Analyze a single driver - worker process function.
 
     This function runs in a separate process and must be pickleable.
@@ -37,50 +39,56 @@ def analyze_single_driver(
     try:
         start_time = time.time()
 
+        # Create output manager for unified results
+        output_manager = OutputManager(
+            output_level=OutputLevel.VERBOSE if verbose else OutputLevel.NORMAL,
+            output_format=OutputFormat.JSON,
+            dedup_vulnerabilities=True,
+            capture_raw_state=False,  # Keep lightweight for batch processing
+        )
+
         if safe_mode:
             # Use safe analyzer with conservative settings
-            from .safe_analyzer import analyze_driver_safe
+            from .safe_analyzer import analyze_driver_safe_with_unified_output
 
-            full_result = analyze_driver_safe(driver_path, profile=profile, timeout_override=timeout, verbose=verbose)
-            return full_result
+            unified_result = analyze_driver_safe_with_unified_output(
+                driver_path, profile=profile, timeout_override=timeout, verbose=verbose, output_manager=output_manager
+            )
+            return unified_result
         else:
-            # Original analysis mode
+            # Original analysis mode with unified output
             config = AnalysisConfig(timeout=timeout, debug=False, verbose=verbose)
-            context = AnalysisContext.create_for_driver(driver_path, config)
+            context = AnalysisContext.create_for_driver(driver_path, config, output_manager=output_manager)
 
             analyzer = DriverAnalyzer(context)
             result = analyzer.analyze()
 
-        analysis_time = time.time() - start_time
+            # Calculate analysis time and create unified result
+            analysis_time = time.time() - start_time
+            unified_result = output_manager.create_result(raw_result=result, analysis_time=analysis_time)
 
-        if verbose:
-            logger.info(f"Completed analysis of {driver_path.name} in {analysis_time:.2f}s")
+            if verbose:
+                logger.info(f"Completed analysis of {driver_path.name} in {analysis_time:.2f}s")
 
-        # Convert to complete JSON including metadata
-        full_result = result.model_dump()
-
-        # Add metadata
-        full_result["driver_path"] = str(driver_path)
-        full_result["filename"] = driver_path.name
-        full_result["analysis_time"] = analysis_time
-        full_result["success"] = True
-        full_result["vuln_count"] = len(result.vuln)
-
-        return full_result
+            return unified_result
 
     except Exception as e:
         if verbose:
             logger.error(f"Failed to analyze {driver_path.name}: {e}")
-        return {
-            "driver_path": str(driver_path),
-            "filename": driver_path.name,
-            "analysis_time": 0,
-            "basic": {},
-            "vuln": [],
-            "vuln_count": 0,
-            "success": False,
-            "error": [str(e)],
-        }
+
+        # Create a minimal output manager for error result
+        output_manager = OutputManager(
+            output_level=OutputLevel.NORMAL,
+            output_format=OutputFormat.JSON,
+            dedup_vulnerabilities=True,
+            capture_raw_state=False,
+        )
+        output_manager.initialize(driver_path, {})
+
+        # Create unified error result
+        error_result = output_manager.create_result(raw_result=None, analysis_time=0, errors=[str(e)])
+
+        return error_result
 
 
 class ProcessingStrategy(ABC):
@@ -109,7 +117,7 @@ class SequentialProcessor(ProcessingStrategy):
             if self.progress:
                 self.progress.update(description=f"Analyzing {driver_path.name}")
 
-            result_data = analyze_single_driver(
+            unified_result = analyze_single_driver(
                 driver_path,
                 self.config.timeout_per_driver,
                 self.config.verbose,
@@ -120,11 +128,11 @@ class SequentialProcessor(ProcessingStrategy):
             result = DriverResult(
                 driver_path=driver_path,
                 filename=driver_path.name,
-                success=result_data["success"],
-                analysis_time=result_data["analysis_time"],
-                vuln_count=result_data["vuln_count"],
-                error=result_data.get("error"),
-                data=result_data,
+                success=(len(unified_result.errors) == 0),
+                analysis_time=unified_result.analysis_time,
+                vuln_count=len(unified_result.vulnerabilities),
+                error=unified_result.errors if unified_result.errors else None,
+                data=unified_result,  # Store the unified result directly
             )
 
             if result.success:
@@ -181,16 +189,16 @@ class ParallelProcessor(ProcessingStrategy):
                 elapsed = time.time() - start_times.get(driver_path, time.time())
 
                 try:
-                    result_data = future.result()
+                    unified_result = future.result()
 
                     result = DriverResult(
                         driver_path=driver_path,
                         filename=driver_path.name,
-                        success=result_data["success"],
-                        analysis_time=result_data["analysis_time"],
-                        vuln_count=result_data["vuln_count"],
-                        error=result_data.get("error"),
-                        data=result_data,
+                        success=(len(unified_result.errors) == 0),
+                        analysis_time=unified_result.analysis_time,
+                        vuln_count=len(unified_result.vulnerabilities),
+                        error=unified_result.errors if unified_result.errors else None,
+                        data=unified_result,  # Store the unified result directly
                     )
 
                     if result.success:
@@ -208,13 +216,18 @@ class ParallelProcessor(ProcessingStrategy):
                             self.progress.log(f"✗ {driver_path.name}: {error_msg} [{elapsed:.1f}s]", "error")
 
                 except Exception as e:
+                    # Create error result using unified output format
+                    output_manager = OutputManager(output_level=OutputLevel.NORMAL, output_format=OutputFormat.JSON)
+                    output_manager.initialize(driver_path, {})
+                    error_result = output_manager.create_result(raw_result=None, analysis_time=elapsed, errors=[str(e)])
+
                     result = DriverResult(
                         driver_path=driver_path,
                         filename=driver_path.name,
                         success=False,
                         analysis_time=elapsed,
                         error=[str(e)],
-                        data={},
+                        data=error_result,
                     )
                     if self.progress:
                         self.progress.log(f"✗ {driver_path.name}: Error - {e} [{elapsed:.1f}s]", "error")
@@ -266,16 +279,16 @@ class SafeProcessor(ProcessingStrategy):
                 elapsed = time.time() - start_times.get(driver_path, time.time())
 
                 try:
-                    result_data = future.result()
+                    unified_result = future.result()
 
                     result = DriverResult(
                         driver_path=driver_path,
                         filename=driver_path.name,
-                        success=result_data["success"],
-                        analysis_time=result_data["analysis_time"],
-                        vuln_count=result_data["vuln_count"],
-                        error=result_data.get("error"),
-                        data=result_data,
+                        success=(len(unified_result.errors) == 0),
+                        analysis_time=unified_result.analysis_time,
+                        vuln_count=len(unified_result.vulnerabilities),
+                        error=unified_result.errors if unified_result.errors else None,
+                        data=unified_result,  # Store the unified result directly
                     )
 
                     if result.success:
@@ -293,13 +306,18 @@ class SafeProcessor(ProcessingStrategy):
                             self.progress.log(f"✗ {driver_path.name}: {error_msg} [{elapsed:.1f}s]", "error")
 
                 except Exception as e:
+                    # Create error result using unified output format
+                    output_manager = OutputManager(output_level=OutputLevel.NORMAL, output_format=OutputFormat.JSON)
+                    output_manager.initialize(driver_path, {})
+                    error_result = output_manager.create_result(raw_result=None, analysis_time=elapsed, errors=[str(e)])
+
                     result = DriverResult(
                         driver_path=driver_path,
                         filename=driver_path.name,
                         success=False,
                         analysis_time=elapsed,
                         error=[str(e)],
-                        data={},
+                        data=error_result,
                     )
                     if self.progress:
                         self.progress.log(f"✗ {driver_path.name}: Error - {e} [{elapsed:.1f}s]", "error")

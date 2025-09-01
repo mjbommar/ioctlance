@@ -1,9 +1,14 @@
 """Data models for batch analysis."""
 
+import json
 from enum import Enum
 from pathlib import Path
 from typing import Any
 from pydantic import BaseModel, Field, field_validator
+
+# Import OutputFormat from unified location
+from ..output.formats import OutputFormat
+from ..output.manager import UnifiedAnalysisResult
 
 
 class ProcessingMode(str, Enum):
@@ -12,13 +17,6 @@ class ProcessingMode(str, Enum):
     PARALLEL = "parallel"
     SAFE = "safe"
     SEQUENTIAL = "sequential"
-
-
-class OutputFormat(str, Enum):
-    """Output formats for results."""
-
-    JSON = "json"
-    JSONL = "jsonl"
 
 
 class BatchConfig(BaseModel):
@@ -56,10 +54,43 @@ class DriverResult(BaseModel):
     analysis_time: float
     vuln_count: int = 0
     error: list[str] | None = None
-    data: dict[str, Any] = Field(default_factory=dict, description="Complete analysis data")
+    data: UnifiedAnalysisResult | dict[str, Any] = Field(
+        default_factory=dict, description="Complete analysis data - preferably UnifiedAnalysisResult"
+    )
 
     class Config:
         arbitrary_types_allowed = True
+
+    @property
+    def unified_result(self) -> UnifiedAnalysisResult | None:
+        """Get unified analysis result if available."""
+        if isinstance(self.data, UnifiedAnalysisResult):
+            return self.data
+        return None
+
+    def to_legacy_format(self) -> dict[str, Any]:
+        """Convert to legacy format for backward compatibility."""
+        if isinstance(self.data, UnifiedAnalysisResult):
+            # Convert unified result back to legacy format
+            legacy_data = {}
+
+            # Basic information
+            if self.data.raw_result:
+                legacy_data.update(self.data.raw_result.model_dump())
+
+            # Add metadata
+            legacy_data["driver_path"] = str(self.driver_path)
+            legacy_data["filename"] = self.filename
+            legacy_data["analysis_time"] = self.analysis_time
+            legacy_data["success"] = self.success
+            legacy_data["vuln_count"] = self.vuln_count
+            if self.error:
+                legacy_data["error"] = self.error
+
+            return legacy_data
+        else:
+            # Already in legacy format
+            return self.data if isinstance(self.data, dict) else {}
 
 
 class AnalysisStats(BaseModel):
@@ -90,11 +121,66 @@ class BatchResult(BaseModel):
         if self.config.output_format == OutputFormat.JSONL:
             with open(output_path, "w") as f:
                 for result in self.results:
-                    f.write(result.model_dump_json() + "\n")
-                f.write(self.stats.model_dump_json() + "\n")
+                    # Save unified results in JSONL format
+                    if result.unified_result:
+                        # Save each vulnerability as a separate line
+                        for vuln in result.unified_result.vulnerabilities:
+                            vuln_data = {
+                                "type": "vulnerability",
+                                "driver": str(result.driver_path),
+                                "data": vuln.to_summary_dict(),
+                            }
+                            f.write(json.dumps(vuln_data, default=str) + "\n")
+
+                        # Save summary as separate line
+                        summary_data = {
+                            "type": "summary",
+                            "driver": str(result.driver_path),
+                            "data": result.unified_result.summary.model_dump(),
+                        }
+                        f.write(json.dumps(summary_data, default=str) + "\n")
+                    else:
+                        # Fallback to legacy format
+                        legacy_data = {
+                            "type": "legacy_result",
+                            "driver": str(result.driver_path),
+                            "data": result.to_legacy_format(),
+                        }
+                        f.write(json.dumps(legacy_data, default=str) + "\n")
+
+                # Save stats
+                f.write(json.dumps({"type": "batch_stats", "data": self.stats.model_dump()}, default=str) + "\n")
         else:
+            # JSON format
+
             with open(output_path, "w") as f:
-                data = {**self.stats.model_dump(), "results": [r.model_dump() for r in self.results]}
-                import json
+                results_data = []
+                for result in self.results:
+                    if result.unified_result:
+                        # Use unified format
+                        result_data = {
+                            "driver": str(result.driver_path),
+                            "success": result.success,
+                            "analysis_time": result.analysis_time,
+                            "vuln_count": result.vuln_count,
+                            "unified_analysis": result.unified_result.model_dump(),
+                        }
+                        if result.error:
+                            result_data["error"] = result.error
+                    else:
+                        # Use legacy format
+                        result_data = {
+                            "driver": str(result.driver_path),
+                            "success": result.success,
+                            "analysis_time": result.analysis_time,
+                            "vuln_count": result.vuln_count,
+                            "legacy_analysis": result.to_legacy_format(),
+                        }
+                        if result.error:
+                            result_data["error"] = result.error
+
+                    results_data.append(result_data)
+
+                data = {**self.stats.model_dump(), "results": results_data}
 
                 json.dump(data, f, indent=2, default=str)

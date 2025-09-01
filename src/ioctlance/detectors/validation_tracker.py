@@ -55,7 +55,7 @@ class ValidationTracker:
             concrete_size = self._make_concrete(state, size)
 
             if concrete_addr is not None and concrete_size is not None:
-                state_addr = state.addr if hasattr(state, 'addr') else 0
+                state_addr = state.addr if hasattr(state, "addr") else 0
                 self.probe_validated[concrete_addr] = (concrete_size, probe_type, state_addr)
         except Exception as e:
             logger.debug(f"Failed to track probe validation: {e}")
@@ -99,7 +99,7 @@ class ValidationTracker:
             concrete_max = self._make_concrete(state, max_val)
 
             if var_id is not None and concrete_min is not None and concrete_max is not None:
-                state_addr = state.addr if hasattr(state, 'addr') else 0
+                state_addr = state.addr if hasattr(state, "addr") else 0
                 self.bounds_checked[var_id] = (concrete_min, concrete_max, state_addr)
         except Exception as e:
             logger.debug(f"Failed to track bounds check: {e}")
@@ -284,7 +284,7 @@ class ValidationTracker:
             return None
         if isinstance(value, int):
             return value
-        if hasattr(value, 'concrete') and hasattr(state, 'solver'):
+        if hasattr(value, "concrete") and hasattr(state, "solver"):
             try:
                 return state.solver.eval_one(value)
             except:
@@ -293,7 +293,7 @@ class ValidationTracker:
 
     def _get_pointer_id(self, ptr: Any) -> int | None:
         """Get a unique ID for a pointer."""
-        if hasattr(ptr, '__hash__'):
+        if hasattr(ptr, "__hash__"):
             try:
                 return hash(ptr)
             except:
@@ -309,8 +309,8 @@ class ValidationTracker:
         # This would need to analyze the constraint AST
         # For now, simplified check
         try:
-            if hasattr(constraint, 'op') and constraint.op == '__ne__':
-                if hasattr(constraint, 'args'):
+            if hasattr(constraint, "op") and constraint.op == "__ne__":
+                if hasattr(constraint, "args"):
                     # Check if one arg is our pointer and other is 0
                     args = constraint.args
                     if len(args) == 2:

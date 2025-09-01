@@ -122,12 +122,14 @@ class DriverAnalyzer:
         hunt_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - hunt_start_memory
 
         # The IOCTLs are discovered during vulnerability hunting, not handler discovery
-        # Update the handler with discovered IOCTLs
-        if self.context.ioctl_codes and not ioctl_handler.ioctl_codes:
+        # Always update the handler with discovered IOCTLs from context
+        if self.context.ioctl_codes:
             ioctl_handler.ioctl_codes = self.context.ioctl_codes.copy()
-
-        # Log discovered IOCTLs
-        logger.info(f"Discovered {len(ioctl_handler.ioctl_codes)} IOCTL codes: {ioctl_handler.ioctl_codes}")
+            logger.info(
+                f"Updated handler with {len(ioctl_handler.ioctl_codes)} IOCTL codes: {ioctl_handler.ioctl_codes}"
+            )
+        else:
+            logger.info("No IOCTL codes discovered during analysis")
 
         # Create result
         basic_info = BasicInfo(
@@ -140,7 +142,7 @@ class DriverAnalyzer:
                 "hunting vulns": len(self.context.unique_addresses),  # Update tracking
             },
             ioctl_handler=ioctl_handler.address,
-            IoControlCodes=ioctl_handler.ioctl_codes or self.context.ioctl_codes,
+            IoControlCodes=ioctl_handler.ioctl_codes,  # Now always updated from context
         )
 
         # Convert vulnerabilities to model format
@@ -151,10 +153,45 @@ class DriverAnalyzer:
                 from ..models import Vulnerability, VulnerabilityEvaluation
 
                 eval_data = vuln_dict.get("eval", {})
+
+                # Use state_str if available, fall back to state or default
+                state_str = vuln_dict.get("state_str")
+                if not state_str:
+                    state = vuln_dict.get("state")
+                    # Handle weakproxy objects
+                    if state is not None:
+                        try:
+                            import weakref
+
+                            if isinstance(state, weakref.ProxyType):
+                                # Try to get string before it dies
+                                try:
+                                    state_str = str(state)
+                                except (ReferenceError, Exception):
+                                    state_str = "<SimState @ 0x0>"
+                            elif hasattr(state, "addr"):
+                                state_str = str(state)
+                            elif isinstance(state, str):
+                                state_str = state
+                            else:
+                                state_str = "<SimState @ 0x0>"
+                        except Exception:
+                            state_str = "<SimState @ 0x0>"
+                    else:
+                        state_str = "<SimState @ 0x0>"
+
+                # Get severity from vuln_dict or compute from title
+                severity = vuln_dict.get("severity")
+                if not severity:
+                    others_dict = vuln_dict.get("others", {})
+                    severity = others_dict.get("severity")
+                if not severity:
+                    severity = Vulnerability.compute_severity_from_title(vuln_dict.get("title", "Unknown"))
+
                 vuln = Vulnerability(
                     title=vuln_dict.get("title", "Unknown"),
                     description=vuln_dict.get("description", ""),
-                    state=vuln_dict.get("state", "<SimState @ 0x0>"),
+                    state=state_str,
                     eval=VulnerabilityEvaluation(
                         IoControlCode=eval_data.get("IoControlCode", "0x0"),
                         SystemBuffer=eval_data.get("SystemBuffer", "0x0"),
@@ -166,6 +203,7 @@ class DriverAnalyzer:
                     parameters=vuln_dict.get("parameters", {}),
                     others=vuln_dict.get("others", {}),
                     raw_data=vuln_dict.get("raw_data"),  # Include raw data if present
+                    severity=severity,
                 )
                 vuln_models.append(vuln)
             except Exception as e:

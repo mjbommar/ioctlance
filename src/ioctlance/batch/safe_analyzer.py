@@ -1,10 +1,12 @@
 """Safe batch analyzer with conservative settings to prevent hangs."""
 
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 from ..core.analysis_context import AnalysisConfig, AnalysisContext
 from ..core.driver_analyzer import DriverAnalyzer
+from ..output.manager import OutputManager, UnifiedAnalysisResult
+from ..output.formats import OutputFormat, OutputLevel
 
 
 # Preset configurations for different analysis profiles
@@ -185,3 +187,104 @@ def get_profile_for_driver(driver_path: Path) -> str:
     # Large drivers need fast mode
     else:
         return "fast"
+
+
+def analyze_driver_safe_with_unified_output(
+    driver_path: Path,
+    profile: str = "fast",
+    timeout_override: int | None = None,
+    verbose: bool = False,
+    output_manager: OutputManager | None = None,
+) -> UnifiedAnalysisResult:
+    """Analyze a driver with safe settings using unified output system.
+
+    Args:
+        driver_path: Path to the driver file
+        profile: Analysis profile ('fast', 'balanced', 'thorough', 'paranoid')
+        timeout_override: Override the profile timeout
+        verbose: Enable verbose logging
+        output_manager: OutputManager instance to use
+
+    Returns:
+        UnifiedAnalysisResult
+    """
+    import time
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Get profile configuration
+    if profile not in ANALYSIS_PROFILES:
+        logger.warning(f"Unknown profile '{profile}', using 'fast'")
+        profile = "fast"
+
+    profile_config = ANALYSIS_PROFILES[profile].copy()
+
+    # Apply timeout override if provided
+    if timeout_override is not None:
+        profile_config["timeout"] = timeout_override
+        # Scale other timeouts proportionally
+        scale = timeout_override / ANALYSIS_PROFILES[profile]["timeout"]
+        profile_config["ioctl_timeout"] = int(profile_config["ioctl_timeout"] * scale)
+
+    # Add verbose flag
+    profile_config["verbose"] = verbose
+    profile_config["debug"] = verbose  # Enable debug in verbose mode
+
+    # Create output manager if not provided
+    if output_manager is None:
+        output_manager = OutputManager(
+            output_level=OutputLevel.VERBOSE if verbose else OutputLevel.NORMAL,
+            output_format=OutputFormat.JSON,
+            dedup_vulnerabilities=True,
+            capture_raw_state=False,
+        )
+
+    # Create analysis configuration
+    config = AnalysisConfig(**profile_config)
+
+    # Log configuration if verbose
+    if verbose:
+        logger.info(f"Analyzing {driver_path.name} with profile '{profile}':")
+        logger.info(f"  Timeout: {config.timeout}s")
+        logger.info(f"  IOCTL timeout: {config.ioctl_timeout}s")
+        logger.info(f"  Loop bound: {config.bound}")
+        logger.info(f"  Path length: {config.length}")
+        logger.info(f"  Max steps: {config.max_steps}")
+        logger.info(f"  Max states: {config.max_states}")
+
+    try:
+        start_time = time.time()
+
+        # Create context with safe configuration and output manager
+        context = AnalysisContext.create_for_driver(driver_path, config, output_manager=output_manager)
+
+        # Run analysis
+        analyzer = DriverAnalyzer(context)
+        result = analyzer.analyze()
+
+        analysis_time = time.time() - start_time
+
+        # Create unified result
+        unified_result = output_manager.create_result(raw_result=result, analysis_time=analysis_time)
+
+        if verbose:
+            logger.info(
+                f"Completed {driver_path.name} in {analysis_time:.1f}s - "
+                f"{len(unified_result.vulnerabilities)} vulnerabilities found"
+            )
+
+        return unified_result
+
+    except Exception as e:
+        analysis_time = time.time() - start_time if "start_time" in locals() else 0
+        logger.error(f"Failed to analyze {driver_path.name}: {e}")
+
+        # Initialize output manager if not already done
+        if not hasattr(output_manager, "fingerprint") or output_manager.fingerprint is None:
+            output_manager.initialize(driver_path, profile_config)
+
+        # Create unified error result
+        error_result = output_manager.create_result(raw_result=None, analysis_time=analysis_time, errors=[str(e)])
+
+        return error_result

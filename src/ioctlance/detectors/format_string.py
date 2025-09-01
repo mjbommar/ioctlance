@@ -15,15 +15,29 @@ class FormatStringDetector(VulnerabilityDetector):
     # Common printf-family functions vulnerable to format string attacks
     PRINTF_FUNCTIONS = {
         # Standard C functions
-        "sprintf", "vsprintf", "swprintf", "vswprintf",
-        "snprintf", "vsnprintf", "_snprintf", "_vsnprintf",
-        "fprintf", "vfprintf", "printf", "vprintf",
-
+        "sprintf",
+        "vsprintf",
+        "swprintf",
+        "vswprintf",
+        "snprintf",
+        "vsnprintf",
+        "_snprintf",
+        "_vsnprintf",
+        "fprintf",
+        "vfprintf",
+        "printf",
+        "vprintf",
         # Windows kernel specific
-        "DbgPrint", "DbgPrintEx", "KdPrint", "KdPrintEx",
-        "RtlStringCbPrintf", "RtlStringCbPrintfEx",
-        "RtlStringCchPrintf", "RtlStringCchPrintfEx",
-        "RtlUnicodeStringPrintf", "RtlUnicodeStringPrintfEx",
+        "DbgPrint",
+        "DbgPrintEx",
+        "KdPrint",
+        "KdPrintEx",
+        "RtlStringCbPrintf",
+        "RtlStringCbPrintfEx",
+        "RtlStringCchPrintf",
+        "RtlStringCchPrintfEx",
+        "RtlUnicodeStringPrintf",
+        "RtlUnicodeStringPrintfEx",
     }
 
     def __init__(self, context):
@@ -84,9 +98,9 @@ class FormatStringDetector(VulnerabilityDetector):
         # Check if format string is tainted (comes from user input)
         try:
             # Get calling convention arguments
-            if hasattr(state, 'regs'):
+            if hasattr(state, "regs"):
                 # Windows x64 calling convention: RCX, RDX, R8, R9, stack
-                arg_regs = ['rcx', 'rdx', 'r8', 'r9'] if hasattr(state.regs, 'rcx') else ['rdi', 'rsi', 'rdx', 'rcx']
+                arg_regs = ["rcx", "rdx", "r8", "r9"] if hasattr(state.regs, "rcx") else ["rdi", "rsi", "rdx", "rcx"]
 
                 if format_arg_pos < len(arg_regs):
                     format_arg = getattr(state.regs, arg_regs[format_arg_pos])
@@ -119,7 +133,7 @@ class FormatStringDetector(VulnerabilityDetector):
         # If value comes from IOCTL input, mark address as tainted
         if self._is_from_ioctl_input(value):
             try:
-                if hasattr(address, 'concrete'):
+                if hasattr(address, "concrete"):
                     concrete_addr = state.solver.eval(address)
                     self.tainted_strings.add(concrete_addr)
             except:
@@ -136,8 +150,7 @@ class FormatStringDetector(VulnerabilityDetector):
         """
         # For most functions, format string is the second argument (index 1)
         # First argument is usually the destination buffer
-        if function_name in ["sprintf", "snprintf", "swprintf", "_snprintf",
-                             "RtlStringCbPrintf", "RtlStringCchPrintf"]:
+        if function_name in ["sprintf", "snprintf", "swprintf", "_snprintf", "RtlStringCbPrintf", "RtlStringCchPrintf"]:
             return 1
         # For printf/DbgPrint, format string is first argument
         elif function_name in ["printf", "DbgPrint", "KdPrint", "vprintf"]:
@@ -164,15 +177,15 @@ class FormatStringDetector(VulnerabilityDetector):
             return False
 
         # Check if value has symbolic variables
-        if hasattr(value, 'symbolic') and value.symbolic:
+        if hasattr(value, "symbolic") and value.symbolic:
             # Check if any symbolic variable is from IOCTL input
             for var in value.variables:
-                if 'input' in var.lower() or 'ioctl' in var.lower() or 'user' in var.lower():
+                if "input" in var.lower() or "ioctl" in var.lower() or "user" in var.lower():
                     return True
 
         # Check if concrete value points to tainted memory
         try:
-            if hasattr(value, 'concrete'):
+            if hasattr(value, "concrete"):
                 concrete_val = self.context.state.solver.eval(value)
                 if concrete_val in self.tainted_strings:
                     return True
@@ -194,10 +207,10 @@ class FormatStringDetector(VulnerabilityDetector):
             return False
 
         # Check symbolic variable names
-        if hasattr(value, 'symbolic') and value.symbolic:
+        if hasattr(value, "symbolic") and value.symbolic:
             for var in value.variables:
-                var_name = var.lower() if hasattr(var, 'lower') else str(var).lower()
-                if 'systembuffer' in var_name or 'inputbuffer' in var_name:
+                var_name = var.lower() if hasattr(var, "lower") else str(var).lower()
+                if "systembuffer" in var_name or "inputbuffer" in var_name:
                     return True
 
         return False
@@ -216,14 +229,14 @@ class FormatStringDetector(VulnerabilityDetector):
 
         try:
             # Try to read format string from memory
-            if hasattr(format_str_ptr, 'concrete'):
+            if hasattr(format_str_ptr, "concrete"):
                 ptr = state.solver.eval(format_str_ptr)
                 # Read up to 256 bytes for format string
                 fmt_bytes = state.memory.load(ptr, 256)
 
-                if hasattr(fmt_bytes, 'concrete'):
+                if hasattr(fmt_bytes, "concrete"):
                     fmt_str = state.solver.eval(fmt_bytes, cast_to=bytes)
-                    fmt_str = fmt_str.decode('utf-8', errors='ignore')
+                    fmt_str = fmt_str.decode("utf-8", errors="ignore")
 
                     for spec in dangerous_specifiers:
                         if spec in fmt_str:
@@ -233,8 +246,9 @@ class FormatStringDetector(VulnerabilityDetector):
 
         return False
 
-    def _create_format_string_vuln(self, state: SimState, function_name: str,
-                                   format_arg: Any, dangerous_specifiers: bool = False) -> dict[str, Any]:
+    def _create_format_string_vuln(
+        self, state: SimState, function_name: str, format_arg: Any, dangerous_specifiers: bool = False
+    ) -> dict[str, Any]:
         """Create format string vulnerability info.
 
         Args:
@@ -247,7 +261,7 @@ class FormatStringDetector(VulnerabilityDetector):
             Vulnerability information dictionary
         """
         vuln_type = "format_string_specifier" if dangerous_specifiers else "format_string_tainted"
-        vuln_key = (state.addr if hasattr(state, 'addr') else 0, vuln_type, function_name)
+        vuln_key = (state.addr if hasattr(state, "addr") else 0, vuln_type, function_name)
 
         if vuln_key in self.detected_vulns:
             return None
@@ -257,16 +271,15 @@ class FormatStringDetector(VulnerabilityDetector):
 
         return self.create_vulnerability_info(
             title=title,
-            description=f"Format string vulnerability in {function_name}: " +
-                       ("dangerous format specifier detected" if dangerous_specifiers
-                        else "user-controlled format string"),
+            description=f"Format string vulnerability in {function_name}: "
+            + ("dangerous format specifier detected" if dangerous_specifiers else "user-controlled format string"),
             state=state,
             severity="CRITICAL" if dangerous_specifiers else "HIGH",
             parameters={
                 "function": function_name,
                 "format_arg": str(format_arg)[:100],
-                "type": "dangerous_specifier" if dangerous_specifiers else "tainted_input"
-            }
+                "type": "dangerous_specifier" if dangerous_specifiers else "tainted_input",
+            },
         )
 
 

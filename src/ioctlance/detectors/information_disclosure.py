@@ -105,11 +105,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
 
         # 1. Check for uninitialized memory reads
         if self._is_uninitialized_memory(address, state):
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "uninitialized_read",
-                addr_str[:30]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "uninitialized_read", addr_str[:30])
             if vuln_key not in self.detected_vulns:
                 self.detected_vulns.add(vuln_key)
 
@@ -128,17 +124,13 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                         "confidence": "MEDIUM",
                         "impact": "Information disclosure, KASLR bypass",
                         "mitigation": "Initialize memory before use",
-                        "windows_specific": "Can leak pool tags, kernel addresses"
+                        "windows_specific": "Can leak pool tags, kernel addresses",
                     },
                 )
 
         # 2. Check for kernel stack reads
         if self._is_kernel_stack(address):
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "stack_disclosure",
-                addr_str[:30]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "stack_disclosure", addr_str[:30])
             if vuln_key not in self.detected_vulns:
                 self.detected_vulns.add(vuln_key)
 
@@ -156,17 +148,13 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                         "exploitation": "Leak return addresses, local variables",
                         "confidence": "HIGH",
                         "impact": "KASLR bypass, control flow disclosure",
-                        "mitigation": "Avoid exposing stack data to userspace"
+                        "mitigation": "Avoid exposing stack data to userspace",
                     },
                 )
 
         # 3. Check for out-of-bounds reads
         if self._is_oob_read(address, size, state):
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "oob_read",
-                addr_str[:30]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "oob_read", addr_str[:30])
             if vuln_key not in self.detected_vulns:
                 self.detected_vulns.add(vuln_key)
 
@@ -184,7 +172,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                         "exploitation": "Read adjacent memory, leak sensitive data",
                         "confidence": "MEDIUM",
                         "impact": "Information disclosure",
-                        "mitigation": "Validate read boundaries"
+                        "mitigation": "Validate read boundaries",
                     },
                 )
 
@@ -212,11 +200,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
 
         # Check if data contains kernel addresses
         if self._contains_kernel_address(data):
-            vuln_key = (
-                state.addr if hasattr(state, 'addr') else 0,
-                "kernel_address_leak",
-                str(address)[:30]
-            )
+            vuln_key = (state.addr if hasattr(state, "addr") else 0, "kernel_address_leak", str(address)[:30])
             if vuln_key not in self.detected_vulns:
                 self.detected_vulns.add(vuln_key)
 
@@ -235,7 +219,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                         "confidence": "HIGH",
                         "impact": "Defeats address randomization",
                         "mitigation": "Sanitize data before copying to userspace",
-                        "windows_specific": "Exposes kernel module addresses"
+                        "windows_specific": "Exposes kernel module addresses",
                     },
                 )
 
@@ -265,11 +249,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
 
             # 1. Copying uninitialized memory
             if self._is_uninitialized_memory(src, state):
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "copy_uninitialized",
-                    str(src)[:30]
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "copy_uninitialized", str(src)[:30])
                 if vuln_key not in self.detected_vulns:
                     self.detected_vulns.add(vuln_key)
 
@@ -288,17 +268,13 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                             "exploitation": "Leak previous kernel data",
                             "confidence": "HIGH",
                             "impact": "Information disclosure",
-                            "mitigation": "Zero memory before copying"
+                            "mitigation": "Zero memory before copying",
                         },
                     )
 
             # 2. Excessive size copying (potential OOB)
             if self._is_excessive_size(size):
-                vuln_key = (
-                    state.addr if hasattr(state, 'addr') else 0,
-                    "excessive_copy",
-                    str(size)[:30]
-                )
+                vuln_key = (state.addr if hasattr(state, "addr") else 0, "excessive_copy", str(size)[:30])
                 if vuln_key not in self.detected_vulns:
                     self.detected_vulns.add(vuln_key)
 
@@ -317,7 +293,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                             "exploitation": "Read beyond intended boundaries",
                             "confidence": "MEDIUM",
                             "impact": "Information disclosure",
-                            "mitigation": "Validate copy size"
+                            "mitigation": "Validate copy size",
                         },
                     )
 
@@ -338,7 +314,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
         # Common patterns for uninitialized memory
         uninitialized_patterns = [
             "Alloc",  # Recently allocated
-            "Pool",   # Pool allocations
+            "Pool",  # Pool allocations
             "Stack",  # Stack variables
         ]
 
@@ -348,17 +324,17 @@ class InformationDisclosureDetector(VulnerabilityDetector):
                 return True
 
         # Check if memory was just allocated (heuristic)
-        if hasattr(state, 'history'):
+        if hasattr(state, "history"):
             recent_calls = []
             try:
                 for action in state.history.actions[-10:]:
-                    if hasattr(action, 'type') and action.type == 'call':
-                        if hasattr(action, 'function_name'):
+                    if hasattr(action, "type") and action.type == "call":
+                        if hasattr(action, "function_name"):
                             recent_calls.append(action.function_name)
             except:
                 pass
 
-            alloc_functions = ['ExAllocatePool', 'ExAllocatePoolWithTag', 'alloca']
+            alloc_functions = ["ExAllocatePool", "ExAllocatePoolWithTag", "alloca"]
             for func in alloc_functions:
                 if func in recent_calls:
                     return True
@@ -403,10 +379,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
             return False
 
         addr_str = str(address)
-        user_buffers = [
-            'SystemBuffer', 'Type3InputBuffer', 'UserBuffer',
-            'OutputBuffer', 'InputBuffer'
-        ]
+        user_buffers = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "OutputBuffer", "InputBuffer"]
         return any(buf in addr_str for buf in user_buffers)
 
     def _is_oob_read(self, address: Any, size: Any, state: SimState) -> bool:
@@ -423,7 +396,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
         # Check if size is suspiciously large
         if size is not None:
             try:
-                size_val = state.solver.eval_one(size) if hasattr(size, 'concrete') else int(size)
+                size_val = state.solver.eval_one(size) if hasattr(size, "concrete") else int(size)
                 # Suspicious if reading more than a page
                 if size_val > 0x1000:
                     return True
@@ -432,12 +405,12 @@ class InformationDisclosureDetector(VulnerabilityDetector):
 
         # Check if address calculation suggests OOB
         addr_str = str(address)
-        if '+' in addr_str:
+        if "+" in addr_str:
             # Look for large offsets
-            parts = addr_str.split('+')
+            parts = addr_str.split("+")
             for part in parts[1:]:
                 try:
-                    offset = int(part.strip(), 16) if '0x' in part else int(part.strip())
+                    offset = int(part.strip(), 16) if "0x" in part else int(part.strip())
                     if offset > 0x1000:
                         return True
                 except:
@@ -462,8 +435,8 @@ class InformationDisclosureDetector(VulnerabilityDetector):
         kernel_patterns = [
             "0xffff",  # Kernel address prefix
             "0xFFFF",
-            "nt!",     # NT kernel symbols
-            "hal!",    # HAL symbols
+            "nt!",  # NT kernel symbols
+            "hal!",  # HAL symbols
             "Driver",  # Driver objects
             "Device",  # Device objects
         ]
@@ -483,7 +456,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
             return False
 
         try:
-            if hasattr(size, 'concrete'):
+            if hasattr(size, "concrete"):
                 size_val = size
             else:
                 size_val = int(size)
