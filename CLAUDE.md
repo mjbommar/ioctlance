@@ -86,12 +86,52 @@ class AnalysisResult(BaseModel):
         return v
 ```
 
+## 🚨 CRITICAL: Symbolic Value Handling
+
+**NEVER use symbolic values in boolean contexts!** This is the #1 cause of symbolic execution failures.
+
+```python
+# ❌ WRONG - Will crash with ClaripyOperationError
+if symbolic_var:
+    process()
+
+if not symbolic_var:
+    process()
+
+# ✅ CORRECT - Explicit None checks
+if symbolic_var is not None:
+    process()
+
+if symbolic_var is None:
+    return
+
+# ❌ WRONG - Boolean evaluation of symbolic expressions
+if state.inspect.mem_read_address:
+    handle_read()
+
+# ✅ CORRECT - Check for None explicitly
+if state.inspect.mem_read_address is not None:
+    handle_read()
+
+# For checking symbolic vs concrete:
+if hasattr(value, 'symbolic') and value.symbolic:
+    # Handle symbolic value
+    possible_values = state.solver.eval_upto(value, 10)
+else:
+    # Handle concrete value
+    concrete_val = state.solver.eval(value)
+```
+
+**Why this matters**: Claripy symbolic variables (BVS, BVV) cannot be evaluated to True/False directly. Attempting `if symbolic_var:` raises `ClaripyOperationError: testing Expressions for truthiness does not do what you want, as these expressions can be symbolic`. This crashes the symbolic execution engine.
+
+**Common locations to check**:
+- Breakpoint handlers (`b_mem_read`, `b_mem_write`, `b_call`, `b_vex_expr`)
+- Detector `check_state` methods
+- Any code handling `state.inspect.*` attributes
+- Any code handling symbolic buffers or addresses
+
 ### Error Handling
 ```python
-# Be explicit about error conditions
-if symbolic_var is not None:  # NOT: if symbolic_var:
-    process_variable(symbolic_var)
-
 # Use proper exception handling
 try:
     result = analyze_driver(path)

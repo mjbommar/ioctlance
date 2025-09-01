@@ -104,6 +104,11 @@ ignore = [
     
     # Loop variables - sometimes we iterate for side effects
     "B007",   # Loop control variable not used within loop body
+    
+    # Naming conventions - Windows API requires PascalCase
+    "N802",   # Function names (e.g., b_mem_write_DriverStartIo)
+    "N803",   # Argument names (e.g., IoControlCode, SystemBuffer)
+    "N806",   # Variable names in functions
 ]
 
 [tool.ruff.lint.per-file-ignores]
