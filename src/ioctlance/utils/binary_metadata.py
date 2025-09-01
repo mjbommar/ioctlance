@@ -158,7 +158,30 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
             else:
                 metadata.characteristics = None
                 
-            metadata.dll_characteristics = raw_metadata.get("dll_characteristics")
+            # Convert dll_characteristics to int if it's a string (like "HIGH_ENTROPY_VA, DYNAMIC_BASE, NX_COMPAT")
+            raw_dll_characteristics = raw_metadata.get("dll_characteristics")
+            if raw_dll_characteristics:
+                try:
+                    if isinstance(raw_dll_characteristics, str):
+                        # Check if it's a hex value
+                        if raw_dll_characteristics.startswith("0x"):
+                            metadata.dll_characteristics = int(raw_dll_characteristics, 16)
+                        # Check if it's a numeric string
+                        elif raw_dll_characteristics.isdigit():
+                            metadata.dll_characteristics = int(raw_dll_characteristics)
+                        else:
+                            # It's a string with flag names - set to None to avoid Pydantic error
+                            # Store the string representation separately if needed
+                            metadata.raw_metadata["dll_characteristics_string"] = raw_dll_characteristics
+                            metadata.dll_characteristics = None
+                    else:
+                        metadata.dll_characteristics = int(raw_dll_characteristics)
+                except (ValueError, TypeError):
+                    logger.debug(f"Could not parse dll_characteristics: {raw_dll_characteristics}")
+                    metadata.dll_characteristics = None
+            else:
+                metadata.dll_characteristics = None
+                
             metadata.subsystem = raw_metadata.get("subsystem")
 
             # === Architecture ===
@@ -179,25 +202,20 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
             metadata.is_pie = raw_metadata.get("is_pie", False)
             metadata.has_pie = metadata.is_pie
 
-            # Convert dll_characteristics to int if it's a string
-            if metadata.dll_characteristics:
-                try:
-                    if isinstance(metadata.dll_characteristics, str):
-                        # Try to parse as hex or decimal
-                        if metadata.dll_characteristics.startswith("0x"):
-                            dll_chars = int(metadata.dll_characteristics, 16)
-                        else:
-                            dll_chars = int(metadata.dll_characteristics)
-                    else:
-                        dll_chars = int(metadata.dll_characteristics)
-
-                    metadata.dll_characteristics = dll_chars
-                    metadata.has_aslr = bool(dll_chars & 0x0040)  # IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
-                    metadata.has_dep = bool(dll_chars & 0x0100)  # IMAGE_DLLCHARACTERISTICS_NX_COMPAT
-                    metadata.has_cfg = bool(dll_chars & 0x4000)  # IMAGE_DLLCHARACTERISTICS_GUARD_CF
-                    metadata.has_rfg = bool(dll_chars & 0x2000)  # IMAGE_DLLCHARACTERISTICS_GUARD_RF
-                except (ValueError, TypeError):
-                    logger.debug(f"Could not parse dll_characteristics: {metadata.dll_characteristics}")
+            # Extract security features from dll_characteristics if it's an int
+            if metadata.dll_characteristics and isinstance(metadata.dll_characteristics, int):
+                dll_chars = metadata.dll_characteristics
+                metadata.has_aslr = bool(dll_chars & 0x0040)  # IMAGE_DLLCHARACTERISTICS_DYNAMIC_BASE
+                metadata.has_dep = bool(dll_chars & 0x0100)  # IMAGE_DLLCHARACTERISTICS_NX_COMPAT
+                metadata.has_cfg = bool(dll_chars & 0x4000)  # IMAGE_DLLCHARACTERISTICS_GUARD_CF
+                metadata.has_rfg = bool(dll_chars & 0x2000)  # IMAGE_DLLCHARACTERISTICS_GUARD_RF
+            elif "dll_characteristics_string" in metadata.raw_metadata:
+                # Parse security features from string flags
+                dll_flags = metadata.raw_metadata["dll_characteristics_string"]
+                metadata.has_aslr = "DYNAMIC_BASE" in dll_flags
+                metadata.has_dep = "NX_COMPAT" in dll_flags
+                metadata.has_cfg = "GUARD_CF" in dll_flags
+                metadata.has_rfg = "GUARD_RF" in dll_flags
 
             # === Size Information ===
             metadata.sizeof_code = raw_metadata.get("sizeof_code", 0)
