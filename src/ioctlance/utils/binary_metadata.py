@@ -130,7 +130,34 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
                     pass
 
             metadata.checksum = raw_metadata.get("checksum")
-            metadata.characteristics = raw_metadata.get("characteristics")
+            
+            # Convert characteristics to int if it's a string (like "EXECUTABLE_IMAGE, LARGE_ADDRESS_AWARE")
+            raw_characteristics = raw_metadata.get("characteristics")
+            if raw_characteristics:
+                try:
+                    if isinstance(raw_characteristics, str):
+                        # Check if it's a hex value
+                        if raw_characteristics.startswith("0x"):
+                            metadata.characteristics = int(raw_characteristics, 16)
+                        # Check if it's a numeric string
+                        elif raw_characteristics.isdigit():
+                            metadata.characteristics = int(raw_characteristics)
+                        else:
+                            # It's a string with flag names - set to None to avoid Pydantic error
+                            # Store the string representation separately if needed
+                            metadata.raw_metadata["characteristics_string"] = raw_characteristics
+                            metadata.characteristics = None
+                            # Check for DLL flag in the string
+                            metadata.is_dll = "DLL" in raw_characteristics
+                    else:
+                        metadata.characteristics = int(raw_characteristics)
+                        metadata.is_dll = bool(metadata.characteristics & 0x2000) if metadata.characteristics else False
+                except (ValueError, TypeError):
+                    logger.debug(f"Could not parse characteristics: {raw_characteristics}")
+                    metadata.characteristics = None
+            else:
+                metadata.characteristics = None
+                
             metadata.dll_characteristics = raw_metadata.get("dll_characteristics")
             metadata.subsystem = raw_metadata.get("subsystem")
 
@@ -141,7 +168,10 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
 
             metadata.is_driver = raw_metadata.get("is_driver", False)
             metadata.is_gui = raw_metadata.get("is_gui", False)
-            metadata.is_dll = "DLL" in str(metadata.characteristics) if metadata.characteristics else False
+            
+            # is_dll and is_exe already set in characteristics parsing above
+            if not hasattr(metadata, 'is_dll') or metadata.is_dll is None:
+                metadata.is_dll = False
             metadata.is_exe = not metadata.is_dll
 
             # === Security Features ===
@@ -444,8 +474,16 @@ def extract_complete_metadata(driver_path: Path) -> CompleteMetadata | None:
             if symbols:
                 metadata.has_symbols = True
                 metadata.num_symbols = len(symbols)
-                # Store a sample of symbols
-                metadata.symbols = symbols[:100] if isinstance(symbols, list) else []
+                # Extract symbol names from dict entries
+                if isinstance(symbols, list) and symbols:
+                    # If symbols are dicts, extract the 'name' field
+                    if isinstance(symbols[0], dict):
+                        metadata.symbols = [sym.get("name", str(sym)) for sym in symbols[:100]]
+                    else:
+                        # Already strings
+                        metadata.symbols = symbols[:100]
+                else:
+                    metadata.symbols = []
 
             # === TLS Callbacks ===
             tls_callbacks = raw_metadata.get("tls_callbacks", [])

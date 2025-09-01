@@ -204,11 +204,13 @@ def capture_symbolic_state(state: SimState) -> RawSymbolicState:
     # Capture key symbolic expressions from inspect
     if hasattr(state, "inspect"):
         try:
-            if hasattr(state.inspect, "mem_read_address") and state.inspect.mem_read_address:
+            # IMPORTANT: Use explicit None checks to avoid ClaripyOperationError
+            # Symbolic values cannot be evaluated in boolean contexts
+            if hasattr(state.inspect, "mem_read_address") and state.inspect.mem_read_address is not None:
                 symbolic_exprs["mem_read_address"] = str(state.inspect.mem_read_address)
-            if hasattr(state.inspect, "mem_write_address") and state.inspect.mem_write_address:
+            if hasattr(state.inspect, "mem_write_address") and state.inspect.mem_write_address is not None:
                 symbolic_exprs["mem_write_address"] = str(state.inspect.mem_write_address)
-            if hasattr(state.inspect, "mem_write_expr") and state.inspect.mem_write_expr:
+            if hasattr(state.inspect, "mem_write_expr") and state.inspect.mem_write_expr is not None:
                 symbolic_exprs["mem_write_expr"] = str(state.inspect.mem_write_expr)
         except:
             pass
