@@ -113,7 +113,12 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
     if hasattr(context, "detectors") and context.detectors:
         for detector in context.detectors:
             if detector.enabled:
-                vuln_info = detector.check_state(state, "mem_read", address=state.inspect.mem_read_address)
+                vuln_info = detector.check_state(
+                    state,
+                    "mem_read",
+                    address=state.inspect.mem_read_address,
+                    size=state.inspect.mem_read_length
+                )
                 if vuln_info:
                     context.add_vulnerability(vuln_info)
                     logger.debug(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
@@ -545,7 +550,7 @@ def b_vex_expr(state: SimState, context: AnalysisContext) -> None:
         state: Current simulation state
         context: Analysis context
     """
-    if not state.inspect.expr:
+    if state.inspect.expr is None:
         return
 
     expr = state.inspect.expr

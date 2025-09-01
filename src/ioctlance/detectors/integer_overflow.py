@@ -153,7 +153,7 @@ class IntegerOverflowDetector(VulnerabilityDetector):
                 },
             }
 
-            self.context.print_info(f"[VULN] {vuln_type} at {state.addr:#x}")
+            logger.info(f"[VULN] {vuln_type} at {state.addr:#x}")
             return vuln
 
         return None

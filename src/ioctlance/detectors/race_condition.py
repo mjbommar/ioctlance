@@ -105,7 +105,7 @@ class RaceConditionDetector(VulnerabilityDetector):
                 first_state_addr = self.user_space_reads[tracked_addr][0]
 
                 return self.create_vulnerability_info(
-                    title="double-fetch race condition",
+                    title="Double-Fetch Race Condition",
                     description=f"Multiple reads from user-space address {hex(concrete_addr)}",
                     state=state,
                     others={

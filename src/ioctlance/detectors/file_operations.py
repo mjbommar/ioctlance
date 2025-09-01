@@ -1,7 +1,7 @@
 """Dangerous file operation vulnerability detector."""
 
 import logging
-from typing import Any, cast
+from typing import Any
 
 from angr import SimState
 
@@ -95,7 +95,7 @@ class FileOperationDetector(VulnerabilityDetector):
         is_tainted_disposition = self._is_tainted(create_disposition)
 
         if is_tainted_path:
-            if file_handle:
+            if file_handle is not None:
                 self.tainted_handles.add(file_handle)
 
             dangerous_conditions = []
@@ -176,7 +176,7 @@ class FileOperationDetector(VulnerabilityDetector):
         is_tainted_access = self._is_tainted(desired_access)
 
         if is_tainted_path:
-            if file_handle:
+            if file_handle is not None:
                 self.tainted_handles.add(file_handle)
 
             dangerous_conditions = []
@@ -261,13 +261,13 @@ class FileOperationDetector(VulnerabilityDetector):
         if is_tainted_handle or is_tainted_buffer:
             dangerous_conditions = []
 
-            if is_tainted_handle:
+            if is_tainted_handle is True:
                 dangerous_conditions.append("tainted_handle")
-            if is_tainted_buffer:
+            if is_tainted_buffer is True:
                 dangerous_conditions.append("tainted_data")
-            if is_tainted_length:
+            if is_tainted_length is True:
                 dangerous_conditions.append("controlled_size")
-            if is_tainted_offset:
+            if is_tainted_offset is True:
                 dangerous_conditions.append("controlled_offset")
 
             vuln_key = (state.addr, "zwwritefile", tuple(dangerous_conditions))

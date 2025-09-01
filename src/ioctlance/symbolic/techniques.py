@@ -106,7 +106,7 @@ class ExplosionDetector(angr.exploration_techniques.ExplorationTechnique):
                         self.ioctl_timer[ioctl] = time.time()
 
                 except angr.errors.SimValueError:
-                    # IoControlCode is still symbolic
+                    # IoControlCode is still symbolic - track values if needed
                     pass
 
             elif "IoControlCode" in globals_dict:

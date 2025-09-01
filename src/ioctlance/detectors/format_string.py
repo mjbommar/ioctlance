@@ -1,186 +1,274 @@
-"""Format string vulnerability detector."""
+"""Format string vulnerability detector for IOCTLance."""
 
 import logging
 from typing import Any
-
 from angr import SimState
 
-from ..core.analysis_context import AnalysisContext
-from .base import VulnerabilityDetector
+from .base import VulnerabilityDetector, detector_registry
 
 logger = logging.getLogger(__name__)
 
 
 class FormatStringDetector(VulnerabilityDetector):
-    """Detects format string vulnerabilities in sprintf/swprintf/printf family functions."""
+    """Detects format string vulnerabilities in kernel drivers."""
 
-    name = "format_string"
+    # Common printf-family functions vulnerable to format string attacks
+    PRINTF_FUNCTIONS = {
+        # Standard C functions
+        "sprintf", "vsprintf", "swprintf", "vswprintf",
+        "snprintf", "vsnprintf", "_snprintf", "_vsnprintf",
+        "fprintf", "vfprintf", "printf", "vprintf",
+
+        # Windows kernel specific
+        "DbgPrint", "DbgPrintEx", "KdPrint", "KdPrintEx",
+        "RtlStringCbPrintf", "RtlStringCbPrintfEx",
+        "RtlStringCchPrintf", "RtlStringCchPrintfEx",
+        "RtlUnicodeStringPrintf", "RtlUnicodeStringPrintfEx",
+    }
+
+    def __init__(self, context):
+        """Initialize format string detector."""
+        super().__init__(context)
+        self.detected_vulns = set()
+        self.tainted_strings = set()  # Track strings that come from user input
+
+    @property
+    def name(self) -> str:
+        """Get detector name."""
+        return "format_string"
 
     @property
     def description(self) -> str:
         """Get detector description."""
-        return "Detects format string vulnerabilities with tainted format parameters"
-
-    def __init__(self, context: AnalysisContext) -> None:
-        """Initialize the format string detector.
-
-        Args:
-            context: Analysis context
-        """
-        super().__init__(context)
-        self.detected_format_strings = set()
-
-        # Functions that use format strings
-        self.format_functions = {
-            "sprintf",
-            "swprintf",
-            "snprintf",
-            "snwprintf",
-            "vsprintf",
-            "vswprintf",
-            "vsnprintf",
-            "vsnwprintf",
-            "RtlStringCbPrintfA",
-            "RtlStringCbPrintfW",
-            "RtlStringCchPrintfA",
-            "RtlStringCchPrintfW",
-            "DbgPrint",
-            "KdPrint",
-        }
-
-    def detect(self, state: SimState) -> dict[str, Any] | None:
-        """Detect format string vulnerabilities.
-
-        This detector hooks format string functions and checks if:
-        1. The format parameter is tainted (user-controlled)
-        2. The format string contains dangerous specifiers
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            Vulnerability information if detected, None otherwise
-        """
-        # This is called from breakpoints, not directly
-        # The actual detection happens in check_format_string_call
-        return None
+        return "Detects format string vulnerabilities where user-controlled format strings are passed to printf-family functions"
 
     def check_state(self, state: SimState, event_type: str, **kwargs: Any) -> dict[str, Any] | None:
-        """Check state for format string vulnerabilities.
+        """Check for format string vulnerabilities.
 
         Args:
             state: Current simulation state
-            event_type: Type of event (mem_read, mem_write, call, expr)
-            **kwargs: Additional event-specific arguments
+            event_type: Type of event ('function_call')
+            **kwargs: Event-specific data
 
         Returns:
-            Vulnerability information if detected
+            Vulnerability info if found, None otherwise
         """
-        # We only care about function calls
-        if event_type != "call":
-            return None
+        if event_type == "function_call":
+            return self._check_format_function(state, **kwargs)
+        elif event_type == "mem_write":
+            # Track when user data is written to buffers
+            address = kwargs.get("address")
+            value = kwargs.get("value")
+            if address is not None and value is not None:
+                self._track_tainted_write(state, address, value)
 
-        func_name = kwargs.get("func_name")
-        if func_name not in self.format_functions:
-            return None
+        return None
 
-        # Check the format string parameter
-        return self.check_format_string_call(state, func_name, **kwargs)
-
-    def check_format_string_call(self, state: SimState, func_name: str, **kwargs: Any) -> dict[str, Any] | None:
-        """Check a format string function call for vulnerabilities.
+    def _check_format_function(self, state: SimState, function_name: str, **kwargs: Any) -> dict[str, Any] | None:
+        """Check if a printf-family function has tainted format string.
 
         Args:
             state: Current simulation state
-            func_name: Name of the function being called
-            **kwargs: Function arguments
+            function_name: Name of function being called
+            **kwargs: Additional parameters
 
         Returns:
-            Vulnerability information if detected
+            Vulnerability info if found, None otherwise
         """
-        # Get the format string parameter (usually the second parameter)
-        # For sprintf(buffer, format, ...) - format is at index 1
-        # For swprintf(buffer, size, format, ...) - format is at index 2
-
-        format_param_index = 1
-        if "swprintf" in func_name or "snwprintf" in func_name:
-            format_param_index = 2  # swprintf has size parameter
-
-        # Get function arguments based on calling convention
-        # Windows x64 uses RCX, RDX, R8, R9 for first 4 params
-        format_param = None
-
-        if state.arch.name == "AMD64":
-            if format_param_index == 1:
-                format_param = state.regs.rdx
-            elif format_param_index == 2:
-                format_param = state.regs.r8
-        else:
-            # x86 uses stack
-            format_param = state.mem[state.regs.esp + 4 + (format_param_index * 4)].dword.resolved
-
-        if format_param is None:
+        if function_name not in self.PRINTF_FUNCTIONS:
             return None
 
-        # Check if format parameter is symbolic (tainted)
-        is_tainted = False
+        # Get format string argument position based on function
+        format_arg_pos = self._get_format_arg_position(function_name)
 
-        if hasattr(format_param, "symbolic"):
-            is_tainted = format_param.symbolic
-        elif hasattr(format_param, "variables") and len(format_param.variables) > 0:
-            is_tainted = True
+        # Check if format string is tainted (comes from user input)
+        try:
+            # Get calling convention arguments
+            if hasattr(state, 'regs'):
+                # Windows x64 calling convention: RCX, RDX, R8, R9, stack
+                arg_regs = ['rcx', 'rdx', 'r8', 'r9'] if hasattr(state.regs, 'rcx') else ['rdi', 'rsi', 'rdx', 'rcx']
 
-        # Also check if the format string points to tainted memory
-        if not is_tainted:
+                if format_arg_pos < len(arg_regs):
+                    format_arg = getattr(state.regs, arg_regs[format_arg_pos])
+                else:
+                    # Stack argument
+                    stack_offset = 0x20 + (format_arg_pos - 4) * 8  # Shadow space + args
+                    format_arg = state.memory.load(state.regs.rsp + stack_offset, 8)
+
+                # Check if format string pointer is tainted
+                if self._is_tainted(format_arg):
+                    return self._create_format_string_vuln(state, function_name, format_arg)
+
+                # Check if format string itself contains dangerous specifiers
+                if self._contains_dangerous_specifiers(state, format_arg):
+                    return self._create_format_string_vuln(state, function_name, format_arg, dangerous_specifiers=True)
+
+        except Exception as e:
+            logger.debug(f"Error checking format string: {e}")
+
+        return None
+
+    def _track_tainted_write(self, state: SimState, address: Any, value: Any) -> None:
+        """Track when tainted data is written to memory.
+
+        Args:
+            state: Current simulation state
+            address: Memory address being written
+            value: Value being written
+        """
+        # If value comes from IOCTL input, mark address as tainted
+        if self._is_from_ioctl_input(value):
             try:
-                # Try to read the format string from memory
-                format_str_addr = state.solver.eval_one(format_param)
-                # Check if the memory at that address is symbolic
-                format_byte = state.memory.load(format_str_addr, 1)
-                if hasattr(format_byte, "symbolic") and format_byte.symbolic:
-                    is_tainted = True
-            except Exception:
+                if hasattr(address, 'concrete'):
+                    concrete_addr = state.solver.eval(address)
+                    self.tainted_strings.add(concrete_addr)
+            except:
                 pass
 
-        if not is_tainted:
+    def _get_format_arg_position(self, function_name: str) -> int:
+        """Get the argument position of format string for a function.
+
+        Args:
+            function_name: Name of the printf-family function
+
+        Returns:
+            Zero-based index of format string argument
+        """
+        # For most functions, format string is the second argument (index 1)
+        # First argument is usually the destination buffer
+        if function_name in ["sprintf", "snprintf", "swprintf", "_snprintf",
+                             "RtlStringCbPrintf", "RtlStringCchPrintf"]:
+            return 1
+        # For printf/DbgPrint, format string is first argument
+        elif function_name in ["printf", "DbgPrint", "KdPrint", "vprintf"]:
+            return 0
+        # For fprintf, format string is second argument (after file handle)
+        elif function_name in ["fprintf", "vfprintf"]:
+            return 1
+        # For Ex versions, format string comes after component/level
+        elif function_name in ["DbgPrintEx", "KdPrintEx"]:
+            return 2
+        else:
+            return 1  # Default to second argument
+
+    def _is_tainted(self, value: Any) -> bool:
+        """Check if a value is tainted (comes from user input).
+
+        Args:
+            value: Value to check
+
+        Returns:
+            True if tainted, False otherwise
+        """
+        if value is None:
+            return False
+
+        # Check if value has symbolic variables
+        if hasattr(value, 'symbolic') and value.symbolic:
+            # Check if any symbolic variable is from IOCTL input
+            for var in value.variables:
+                if 'input' in var.lower() or 'ioctl' in var.lower() or 'user' in var.lower():
+                    return True
+
+        # Check if concrete value points to tainted memory
+        try:
+            if hasattr(value, 'concrete'):
+                concrete_val = self.context.state.solver.eval(value)
+                if concrete_val in self.tainted_strings:
+                    return True
+        except:
+            pass
+
+        return False
+
+    def _is_from_ioctl_input(self, value: Any) -> bool:
+        """Check if value originates from IOCTL input.
+
+        Args:
+            value: Value to check
+
+        Returns:
+            True if from IOCTL input, False otherwise
+        """
+        if value is None:
+            return False
+
+        # Check symbolic variable names
+        if hasattr(value, 'symbolic') and value.symbolic:
+            for var in value.variables:
+                var_name = var.lower() if hasattr(var, 'lower') else str(var).lower()
+                if 'systembuffer' in var_name or 'inputbuffer' in var_name:
+                    return True
+
+        return False
+
+    def _contains_dangerous_specifiers(self, state: SimState, format_str_ptr: Any) -> bool:
+        """Check if format string contains dangerous format specifiers.
+
+        Args:
+            state: Current simulation state
+            format_str_ptr: Pointer to format string
+
+        Returns:
+            True if dangerous specifiers found, False otherwise
+        """
+        dangerous_specifiers = ["%n", "%hn", "%hhn", "%ln", "%lln"]  # Write to memory
+
+        try:
+            # Try to read format string from memory
+            if hasattr(format_str_ptr, 'concrete'):
+                ptr = state.solver.eval(format_str_ptr)
+                # Read up to 256 bytes for format string
+                fmt_bytes = state.memory.load(ptr, 256)
+
+                if hasattr(fmt_bytes, 'concrete'):
+                    fmt_str = state.solver.eval(fmt_bytes, cast_to=bytes)
+                    fmt_str = fmt_str.decode('utf-8', errors='ignore')
+
+                    for spec in dangerous_specifiers:
+                        if spec in fmt_str:
+                            return True
+        except:
+            pass
+
+        return False
+
+    def _create_format_string_vuln(self, state: SimState, function_name: str,
+                                   format_arg: Any, dangerous_specifiers: bool = False) -> dict[str, Any]:
+        """Create format string vulnerability info.
+
+        Args:
+            state: Current simulation state
+            function_name: Name of vulnerable function
+            format_arg: Format string argument
+            dangerous_specifiers: Whether dangerous specifiers were found
+
+        Returns:
+            Vulnerability information dictionary
+        """
+        vuln_type = "format_string_specifier" if dangerous_specifiers else "format_string_tainted"
+        vuln_key = (state.addr if hasattr(state, 'addr') else 0, vuln_type, function_name)
+
+        if vuln_key in self.detected_vulns:
             return None
+        self.detected_vulns.add(vuln_key)
 
-        # Create unique key for deduplication
-        vuln_key = (state.addr, func_name)
-        if vuln_key in self.detected_format_strings:
-            return None
-        self.detected_format_strings.add(vuln_key)
+        title = "Format String - Dangerous Specifier" if dangerous_specifiers else "Format String - Tainted Input"
 
-        # Create vulnerability report
-        vuln = {
-            "title": "format string vulnerability",
-            "description": f"Tainted format string in {func_name} can lead to information disclosure or code execution",
-            "state": repr(state),
-            "eval": {
-                "IoControlCode": (
-                    hex(self.context.io_control_code)
-                    if isinstance(self.context.io_control_code, int)
-                    else str(self.context.io_control_code)
-                    if self.context.io_control_code is not None
-                    else "N/A"
-                ),
-            },
-            "parameters": {
-                "function": func_name,
-                "format_param": str(format_param),
-                "format_param_index": format_param_index,
-            },
-            "others": {
-                "instruction_address": hex(state.addr),
-                "severity": "CRITICAL",  # Format string bugs can lead to arbitrary code execution
-            },
-        }
-
-        self.context.print_info(f"[VULN] Format string vulnerability in {func_name} at {state.addr:#x}")
-        return vuln
+        return self.create_vulnerability_info(
+            title=title,
+            description=f"Format string vulnerability in {function_name}: " +
+                       ("dangerous format specifier detected" if dangerous_specifiers
+                        else "user-controlled format string"),
+            state=state,
+            severity="CRITICAL" if dangerous_specifiers else "HIGH",
+            parameters={
+                "function": function_name,
+                "format_arg": str(format_arg)[:100],
+                "type": "dangerous_specifier" if dangerous_specifiers else "tainted_input"
+            }
+        )
 
 
-# Register the detector
-from .base import detector_registry
-
+# Register detector
 detector_registry.register(FormatStringDetector)

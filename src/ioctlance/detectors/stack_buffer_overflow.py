@@ -73,9 +73,6 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         if address is None:
             return None
 
-        # Debug: Log all memory writes to understand what's happening
-        if self.context.config.debug:
-            logger.info(f"Stack detector: mem_write at {address}, size={size}")
 
         # Check if the write is to stack memory
         stack_pointer = state.regs.rsp if hasattr(state.regs, "rsp") else state.regs.sp
@@ -100,9 +97,6 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
             # Check for various overflow conditions
             vuln = self._check_overflow_conditions(state, addr_concrete, sp_concrete, size, value)
 
-            # Debug: Log what we're checking
-            if self.context.config.debug and size:
-                logger.info(f"Checking overflow: size={size} to stack addr")
 
             if vuln:
                 # Create unique key for deduplication
@@ -133,9 +127,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         max_stack_size = 1024 * 1024  # 1MB
         max_frame_size = 8192  # 8KB for current frame
 
-        # Debug logging
-        if self.context.config.debug:
-            logger.info(f"Stack check: addr={hex(address)}, sp={hex(stack_pointer)}")
+        # Check if address is within stack bounds
 
         # Check if address is within reasonable stack bounds
         return (stack_pointer - max_stack_size) <= address <= (stack_pointer + max_frame_size)
@@ -157,14 +149,14 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         """
         # Check 0: Simple large write to stack (potential overflow)
         # If we're writing a large, potentially symbolic amount to the stack, flag it
-        if size and (
+        if size is not None and (
             (isinstance(size, int) and size > 256)  # Large concrete write
             or (hasattr(size, "symbolic") and size.symbolic)  # Symbolic size
             or (hasattr(value, "symbolic") and value.symbolic and size > 32)  # Tainted data > typical buffer
         ):
             # This is a potential overflow - writing user-controlled or large data to stack
             return self.create_vulnerability_info(
-                title="stack buffer overflow - large/tainted write",
+                title="Stack Buffer Overflow - Large/Tainted Write",
                 description=f"Large or tainted write to stack (size={size})",
                 state=state,
                 parameters={
@@ -189,7 +181,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         # Check if write overlaps with return address
         if address <= ret_addr_location < (address + size):
             return self.create_vulnerability_info(
-                title="stack buffer overflow - return address overwrite",
+                title="Stack Buffer Overflow - Return Address Overwrite",
                 description="Write operation can overwrite function return address",
                 state=state,
                 parameters={
@@ -203,7 +195,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         # Check 2: Stack canary corruption
         if self._check_canary_corruption(state, address, size):
             return self.create_vulnerability_info(
-                title="stack buffer overflow - canary bypass",
+                title="Stack Buffer Overflow - Canary Bypass",
                 description="Write operation can corrupt stack canary",
                 state=state,
                 parameters={"write_address": hex(address), "write_size": size},
@@ -213,7 +205,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         # Check 3: Guard page access
         if self._check_guard_page_access(address):
             return self.create_vulnerability_info(
-                title="stack buffer overflow - guard page violation",
+                title="Stack Buffer Overflow - Guard Page Violation",
                 description="Write operation accesses guard page",
                 state=state,
                 parameters={"write_address": hex(address), "write_size": size},
@@ -223,7 +215,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         # Check 4: Large stack write with tainted data
         if size > 256 and self._is_tainted_write(value):
             return self.create_vulnerability_info(
-                title="stack buffer overflow - large tainted write",
+                title="Stack Buffer Overflow - Large Tainted Write",
                 description=f"Large tainted write to stack ({size} bytes)",
                 state=state,
                 parameters={
@@ -302,7 +294,6 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         """
         frame_id = id(state.callstack)
         self.stack_canaries[frame_id] = address
-        logger.debug(f"Stack canary set at {hex(address)} for frame {frame_id}")
 
     def add_guard_page(self, address: int) -> None:
         """Mark a page as a guard page.
@@ -313,7 +304,6 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         page_size = 4096
         page_addr = address & ~(page_size - 1)
         self.guard_pages.add(page_addr)
-        logger.debug(f"Guard page added at {hex(page_addr)}")
 
 
 # Register the detector

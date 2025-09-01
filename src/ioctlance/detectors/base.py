@@ -125,7 +125,7 @@ class VulnerabilityDetector(ABC):
         raw_data = None
         try:
             raw_data = capture_raw_state(state, self.context)
-        except Exception as e:
+        except Exception:
             # Don't fail vulnerability recording if raw capture fails
             pass
 

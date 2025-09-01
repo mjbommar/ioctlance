@@ -14,9 +14,9 @@ class HookProbeForRead(BaseHook):
 
         # Check for vulnerabilities with our detector
         if context:
-            from ..detectors.probe_bypass import ProbeBypassDetector
+            from ..detectors.unified_input_validation import UnifiedInputValidationDetector
 
-            detector = ProbeBypassDetector(context)
+            detector = UnifiedInputValidationDetector(context)
             vuln = detector.check_probe_for_read(self.state, Address, Length, Alignment)
             if vuln:
                 context.add_vulnerability(vuln)
@@ -42,9 +42,9 @@ class HookProbeForWrite(BaseHook):
 
         # Check for vulnerabilities with our detector
         if context:
-            from ..detectors.probe_bypass import ProbeBypassDetector
+            from ..detectors.unified_input_validation import UnifiedInputValidationDetector
 
-            detector = ProbeBypassDetector(context)
+            detector = UnifiedInputValidationDetector(context)
             vuln = detector.check_probe_for_write(self.state, Address, Length, Alignment)
             if vuln:
                 context.add_vulnerability(vuln)
@@ -116,10 +116,10 @@ class HookMmMapIoSpace(BaseHook):
 
         # Check for vulnerabilities with our detector
         if context:
-            from ..detectors.physical_memory import PhysicalMemoryDetector
+            from ..detectors.unified_privilege_escalation import UnifiedPrivilegeEscalationDetector
 
             # Try to get existing detector instance or create new one
-            detector = PhysicalMemoryDetector(context)
+            detector = UnifiedPrivilegeEscalationDetector(context)
             vuln = detector.check_mmmapiosspace(self.state, PhysicalAddress, NumberOfBytes, CacheType)
             if vuln:
                 context.add_vulnerability(vuln)

@@ -34,9 +34,9 @@ class HookZwTerminateProcess(BaseHook):
 
         # Check for vulnerabilities with our detector
         if context:
-            from ..detectors.process_termination import ProcessTerminationDetector
+            from ..detectors.unified_privilege_escalation import UnifiedPrivilegeEscalationDetector
 
-            detector = ProcessTerminationDetector(context)
+            detector = UnifiedPrivilegeEscalationDetector(context)
             vuln = detector.check_zwterminateprocess(self.state, ProcessHandle, ExitStatus)
             if vuln:
                 context.add_vulnerability(vuln)
@@ -57,9 +57,9 @@ class HookPsLookupProcessByProcessId(BaseHook):
 
         # Check for vulnerabilities with our detector
         if context:
-            from ..detectors.process_termination import ProcessTerminationDetector
+            from ..detectors.unified_privilege_escalation import UnifiedPrivilegeEscalationDetector
 
-            detector = ProcessTerminationDetector(context)
+            detector = UnifiedPrivilegeEscalationDetector(context)
             vuln = detector.check_pslookupprocessbyprocessid(self.state, ProcessId, Process)
             if vuln:
                 context.add_vulnerability(vuln)
@@ -88,9 +88,9 @@ class HookZwOpenProcess(BaseHook):
 
         # Check for vulnerabilities with our detector
         if context:
-            from ..detectors.process_termination import ProcessTerminationDetector
+            from ..detectors.unified_privilege_escalation import UnifiedPrivilegeEscalationDetector
 
-            detector = ProcessTerminationDetector(context)
+            detector = UnifiedPrivilegeEscalationDetector(context)
             vuln = detector.check_zwopenprocess(self.state, ProcessHandle, DesiredAccess, ObjectAttributes, ClientId)
             if vuln:
                 context.add_vulnerability(vuln)
@@ -116,13 +116,12 @@ class HookObDereferenceObject(BaseHook):
         context = self.get_context()
 
         # Check for vulnerabilities with our detector
-        if context:
-            from ..detectors.process_termination import ProcessTerminationDetector
-
-            detector = ProcessTerminationDetector(context)
-            vuln = detector.check_obdereferenceobject(self.state, Object)
-            if vuln:
-                context.add_vulnerability(vuln)
+        if context and hasattr(context, "detectors"):
+            for detector in context.detectors:
+                if detector.enabled and hasattr(detector, "check_obdereference"):
+                    vuln = detector.check_obdereference(self.state, Object)
+                    if vuln:
+                        context.add_vulnerability(vuln)
 
         if context:
             context.print_debug(f"ObDereferenceObject: Object={Object}")
@@ -138,13 +137,12 @@ class HookObfDereferenceObject(BaseHook):
         context = self.get_context()
 
         # Check for vulnerabilities with our detector
-        if context:
-            from ..detectors.process_termination import ProcessTerminationDetector
-
-            detector = ProcessTerminationDetector(context)
-            vuln = detector.check_obdereferenceobject(self.state, Object)
-            if vuln:
-                context.add_vulnerability(vuln)
+        if context and hasattr(context, "detectors"):
+            for detector in context.detectors:
+                if detector.enabled and hasattr(detector, "check_obdereference"):
+                    vuln = detector.check_obdereference(self.state, Object)
+                    if vuln:
+                        context.add_vulnerability(vuln)
 
         if context:
             context.print_debug(f"ObfDereferenceObject: Object={Object}")

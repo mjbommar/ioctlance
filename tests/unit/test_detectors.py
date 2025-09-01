@@ -35,10 +35,11 @@ class TestDetectorRegistry:
 
         # Check for some expected detectors
         detector_names = [d.__name__ for d in detectors]
-        assert "NullPointerDetector" in detector_names
-        assert "PhysicalMemoryDetector" in detector_names
+        assert "UnifiedMemoryDetector" in detector_names  # Includes null pointer detection
+        assert "UnifiedPrivilegeEscalationDetector" in detector_names
         assert "StackBufferOverflowDetector" in detector_names
-        assert "ProcessTerminationDetector" in detector_names
+        assert "UnifiedInputValidationDetector" in detector_names
+        assert "HeapBufferOverflowDetector" in detector_names  # New detector
 
     def test_create_instances(self, real_context):
         """Test creating detector instances with real context."""
@@ -57,10 +58,10 @@ class TestDetectorRegistry:
         assert len(names) == len(set(names))
 
         # Should have expected detectors
-        assert "null_pointer" in names
-        assert "physical_memory_mapping" in names
+        assert "unified_memory" in names  # Includes null pointer detection
+        assert "unified_privilege_escalation" in names  # Includes physical memory and process termination
         assert "stack_buffer_overflow" in names
-        assert "process_termination" in names
+        assert "heap_buffer_overflow" in names  # New detector
 
     def test_detector_check_state(self, real_context):
         """Test that detectors can check states without errors."""
@@ -107,18 +108,20 @@ class TestSpecificDetectors:
         config = AnalysisConfig(timeout=5, debug=False)
         return AnalysisContext.create_for_driver(driver_path, config)
 
-    def test_physical_memory_detector_initialization(self, physical_memory_context):
-        """Test PhysicalMemoryDetector initialization."""
-        from ioctlance.detectors.physical_memory import PhysicalMemoryDetector
+    def test_unified_privilege_escalation_detector_initialization(self, physical_memory_context):
+        """Test UnifiedPrivilegeEscalationDetector initialization."""
+        from ioctlance.detectors.unified_privilege_escalation import UnifiedPrivilegeEscalationDetector
 
-        detector = PhysicalMemoryDetector(physical_memory_context)
-        assert detector.name == "physical_memory_mapping"
+        detector = UnifiedPrivilegeEscalationDetector(physical_memory_context)
+        assert detector.name == "unified_privilege_escalation"
         assert detector.context == physical_memory_context
+        # Detector should handle both physical memory and process termination
 
-    def test_process_termination_detector_initialization(self, process_termination_context):
-        """Test ProcessTerminationDetector initialization."""
-        from ioctlance.detectors.process_termination import ProcessTerminationDetector
+    def test_unified_memory_detector_initialization(self, physical_memory_context):
+        """Test UnifiedMemoryDetector initialization."""
+        from ioctlance.detectors.unified_memory import UnifiedMemoryDetector
 
-        detector = ProcessTerminationDetector(process_termination_context)
-        assert detector.name == "process_termination"
-        assert detector.context == process_termination_context
+        detector = UnifiedMemoryDetector(physical_memory_context)
+        assert detector.name == "unified_memory"
+        assert detector.context == physical_memory_context
+        # Detector should handle double-free, UAF, and null pointer issues
