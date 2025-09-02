@@ -14,6 +14,10 @@ from ..models import AnalysisResult, BasicInfo, DriverInfo, IOCTLHandler
 from ..utils.helpers import find_device_names, find_driver_type
 from ..utils.binary_metadata import extract_complete_metadata, analyze_binary_for_vulnerabilities
 
+# Apply runtime patches to angr
+from ..hooks.ccall_patch import apply_patches
+apply_patches()
+
 logger = logging.getLogger(__name__)
 
 
