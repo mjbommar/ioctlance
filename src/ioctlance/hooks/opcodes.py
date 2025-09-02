@@ -2,6 +2,7 @@
 
 import claripy
 from angr import SimState
+from ..utils.helpers import safe_hex
 
 
 def is_tainted(value) -> bool:
@@ -61,13 +62,13 @@ def wrmsr_hook(state: SimState) -> None:
                 "description": "User can control Model Specific Register writes",
                 "state": repr(state),
                 "eval": {
-                    "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                    "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                     "MSR": str(state.regs.ecx),
                     "Value_EDX": str(state.regs.edx),
                     "Value_EAX": str(state.regs.eax),
                 },
                 "parameters": {},
-                "others": {"critical_msrs": [hex(msr) for msr in critical_msrs]},
+                "others": {"critical_msrs": [safe_hex(msr) for msr in critical_msrs]},
             }
 
             if hasattr(context, "vulnerabilities"):
@@ -101,7 +102,7 @@ def out_hook(state: SimState) -> None:
                 "description": "User can control I/O port writes (potential system reset)",
                 "state": repr(state),
                 "eval": {
-                    "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                    "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                     "Port": str(state.regs.dx),
                     "Data": str(state.regs.al),
                 },
@@ -144,13 +145,13 @@ def rep_movsb_hook(state: SimState) -> None:
                 "description": f"User-controlled string copy length (max: {max_count:#x})",
                 "state": repr(state),
                 "eval": {
-                    "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                    "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                     "Destination": str(dst),
                     "Source": str(src),
                     "Count": str(count),
                 },
                 "parameters": {},
-                "others": {"max_count": hex(max_count) if isinstance(max_count, int) else str(max_count)},
+                "others": {"max_count": safe_hex(max_count) if isinstance(max_count, int) else str(max_count)},
             }
 
             if hasattr(context, "vulnerabilities"):
@@ -213,14 +214,14 @@ def _rep_movs_generic(state: SimState, element_size: int, insn_name: str) -> Non
                 "description": f"User-controlled string copy length (max: {max_count:#x} elements)",
                 "state": repr(state),
                 "eval": {
-                    "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                    "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                     "Destination": str(dst),
                     "Source": str(src),
                     "Count": str(count),
                 },
                 "parameters": {},
                 "others": {
-                    "max_bytes": hex(max_count * element_size) if isinstance(max_count, int) else str(max_count)
+                    "max_bytes": safe_hex(max_count * element_size) if isinstance(max_count, int) else str(max_count)
                 },
             }
 
@@ -293,14 +294,14 @@ def _rep_stos_generic(state: SimState, element_size: int, reg_name: str, insn_na
                 "description": f"User-controlled memory fill length (max: {max_count:#x} elements)",
                 "state": repr(state),
                 "eval": {
-                    "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                    "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                     "Destination": str(dst),
                     "Value": str(value),
                     "Count": str(count),
                 },
                 "parameters": {},
                 "others": {
-                    "max_bytes": hex(max_count * element_size) if isinstance(max_count, int) else str(max_count)
+                    "max_bytes": safe_hex(max_count * element_size) if isinstance(max_count, int) else str(max_count)
                 },
             }
 
@@ -326,7 +327,7 @@ def int_hook(state: SimState) -> None:
             "description": "User-controlled registers during interrupt",
             "state": repr(state),
             "eval": {
-                "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                 "RAX": str(state.regs.rax),
                 "RCX": str(state.regs.rcx),
             },
@@ -360,7 +361,7 @@ def rdpmc_hook(state: SimState) -> None:
             "description": "User can control which performance counter to read",
             "state": repr(state),
             "eval": {
-                "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                 "Counter": str(state.regs.ecx),
             },
             "parameters": {},
@@ -384,7 +385,7 @@ def outs_hook(state: SimState) -> None:
             "description": "User-controlled I/O port string write",
             "state": repr(state),
             "eval": {
-                "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                 "Port": str(state.regs.dx),
                 "Source": str(state.regs.rsi),
             },
@@ -409,7 +410,7 @@ def ins_hook(state: SimState) -> None:
             "description": "User-controlled I/O port string read",
             "state": repr(state),
             "eval": {
-                "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                 "Port": str(state.regs.dx),
                 "Destination": str(state.regs.rdi),
             },
@@ -449,7 +450,7 @@ def popfw_hook(state: SimState) -> None:
                 "description": "User can control processor FLAGS",
                 "state": repr(state),
                 "eval": {
-                    "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+                    "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
                     "Stack_Value": str(flags_value),
                 },
                 "parameters": {},
@@ -474,7 +475,7 @@ def sidt_hook(state: SimState) -> None:
         "description": "Reveals Interrupt Descriptor Table address",
         "state": repr(state),
         "eval": {
-            "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+            "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
         },
         "parameters": {},
         "others": {},
@@ -496,7 +497,7 @@ def lidt_hook(state: SimState) -> None:
         "description": "Can modify Interrupt Descriptor Table",
         "state": repr(state),
         "eval": {
-            "IoControlCode": hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
+            "IoControlCode": safe_hex(context.io_control_code) if hasattr(context, "io_control_code") else "N/A",
         },
         "parameters": {},
         "others": {"severity": "CRITICAL"},
