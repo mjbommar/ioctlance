@@ -99,6 +99,32 @@ Examples:
     parser.add_argument("--no-progress", action="store_true", help="Disable progress display")
 
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+    
+    # Verification settings (enabled by default for better accuracy)
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Disable post-detection verification (not recommended - increases false positives)"
+    )
+    
+    parser.add_argument(
+        "--verification-level",
+        choices=["none", "basic", "standard", "deep"],
+        default="standard",
+        help="Verification depth: none|basic|standard|deep (default: standard)"
+    )
+    
+    parser.add_argument(
+        "--keep-false-positives",
+        action="store_true",
+        help="Don't filter false positives (keeps all detections)"
+    )
+    
+    parser.add_argument(
+        "--no-reclassify",
+        action="store_true",
+        help="Don't reclassify misidentified vulnerabilities"
+    )
 
     args = parser.parse_args()
 
@@ -144,6 +170,11 @@ Examples:
         beam_width=args.beam_width,
         triage_steps=args.triage_steps,
         triage_beam_width=args.triage_beam_width,
+        # Verification settings (enabled by default)
+        verification_enabled=not args.no_verify,
+        verification_level=args.verification_level if not args.no_verify else "none",
+        filter_false_positives=not args.keep_false_positives,
+        reclassify_vulnerabilities=not args.no_reclassify,
     )
 
     # Run analyzer (console already created above)
