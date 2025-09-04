@@ -39,6 +39,12 @@ class BatchConfig(BaseModel):
     beam_width: int = Field(default=64, ge=1, description="Beam width for beam search")
     triage_steps: int = Field(default=3000, ge=0, description="Triage window steps for beam search")
     triage_beam_width: int | None = Field(default=24, description="Beam width during triage window")
+    
+    # Verification settings (enabled by default for better accuracy)
+    verification_enabled: bool = Field(default=True, description="Enable post-detection verification")
+    verification_level: str = Field(default="standard", description="Verification level: none|basic|standard|deep")
+    filter_false_positives: bool = Field(default=True, description="Filter detected false positives")
+    reclassify_vulnerabilities: bool = Field(default=True, description="Reclassify misidentified vulnerabilities")
 
     @field_validator("output_path")
     @classmethod
