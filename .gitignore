@@ -48,6 +48,11 @@ test.json
 benchmark_results/
 debug_*.sh
 
+# Local-only artifacts and embedded repos
+reference/angr/
+scripts/find_truthiness_errors.py
+samples/ilp60x64_3.sys.json
+
 # Don't ignore important JSON configs
 !pytest.ini
 !ruff.toml
