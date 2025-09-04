@@ -1,6 +1,6 @@
 """Binary metadata models for comprehensive driver analysis."""
 
-from typing import Dict, List, Optional, Any
+from typing import Optional, Any
 from pydantic import BaseModel, Field
 
 

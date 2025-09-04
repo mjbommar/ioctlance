@@ -14,6 +14,7 @@ from angr import SimState
 
 from ..core.analysis_context import AnalysisContext
 from .base import VulnerabilityDetector, detector_registry
+from ..utils.error_handler import SymbolicExecutionErrorHandler
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +75,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
     """
 
     name = "unified_memory"
+    # Backwards-compatible alias so tests can reference UnifiedMemoryDetector.MemoryRegion
+    MemoryRegion = MemoryRegion
 
     # Windows pool tags we commonly see
     COMMON_POOL_TAGS = {"File", "Devi", "Thre", "Proc", "Driv", "IoCt"}
@@ -121,7 +124,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         if event_type in ("mem_read", "mem_write"):
             return self._check_memory_access(state, event_type, **kwargs)
         elif event_type == "call":
-            func_name = kwargs.get("function_name", "")
+            # Extract func_name and remove it from kwargs to avoid duplicate argument error
+            func_name = kwargs.pop("func_name", kwargs.pop("function_name", ""))
             return self._check_function_call(state, func_name, **kwargs)
         elif event_type == "free":
             # Called from ExFreePool hooks
@@ -132,13 +136,15 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
     # Hook compatibility methods for backwards compatibility
     def check_exfreepool(self, state: SimState, pool_ptr: Any, tag: Any = None) -> dict[str, Any] | None:
         """Compatibility method for ExFreePool hooks."""
-        return self._handle_free(state, "ExFreePoolWithTag" if tag else "ExFreePool", pool_ptr=pool_ptr, tag=tag)
+        # Use ExFreePoolWithTag if tag parameter was provided (even if 0 or symbolic)
+        func_name = "ExFreePoolWithTag" if tag is not None else "ExFreePool"
+        return self._handle_free(state, func_name, pool_ptr=pool_ptr, tag=tag)
 
     def check_exallocatepool(self, state: SimState, pool_type: Any, size: Any, tag: Any = None) -> Any:
         """Compatibility method for ExAllocatePool hooks."""
-        return self._handle_allocation(
-            state, "ExAllocatePoolWithTag" if tag else "ExAllocatePool", pool_type=pool_type, size=size, tag=tag
-        )
+        # Use ExAllocatePoolWithTag if tag parameter was provided (even if 0 or symbolic)
+        func_name = "ExAllocatePoolWithTag" if tag is not None else "ExAllocatePool"
+        return self._handle_allocation(state, func_name, pool_type=pool_type, size=size, tag=tag)
 
     def _check_memory_access(self, state: SimState, event_type: str, **kwargs: Any) -> dict[str, Any] | None:
         """Check memory access for use-after-free and null pointer dereferences."""
@@ -185,6 +191,8 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
 
     def _check_function_call(self, state: SimState, func_name: str, **kwargs: Any) -> dict[str, Any] | None:
         """Check function calls for memory operations."""
+        if not func_name:
+            return None
         func_lower = func_name.lower()
 
         # Allocation functions
@@ -285,7 +293,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         region = self.memory_regions[concrete_addr]
 
         # Check pool tag mismatch (if provided)
-        if tag and region.pool_tag:
+        if tag is not None and region.pool_tag is not None:
             extracted_tag = self._extract_pool_tag(tag)
             if extracted_tag != region.pool_tag:
                 return self._create_tag_mismatch_vuln(state, concrete_addr, region.pool_tag, extracted_tag)
@@ -616,13 +624,17 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
             try:
                 # Try to evaluate with the solver
                 return state.solver.eval_one(value)
-            except:
+            except Exception as e:
+                if not SymbolicExecutionErrorHandler.handle_claripy_error(e, "concrete value evaluation"):
+                    logger.debug(f"Failed to make value concrete: {e}")
                 # Not a symbolic value or can't be made concrete
                 pass
         # Try to convert directly if it's a number-like object
         try:
             return int(value)
-        except:
+        except Exception as e:
+            if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                logger.debug(f"Failed to convert value to int: {e}")
             return None
 
     def _check_null_pointer(self, state: SimState, event_type: str, address: Any) -> dict[str, Any] | None:
@@ -724,35 +736,7 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
 
     def _is_symbolic(self, value: Any) -> bool:
         """Check if value is symbolic."""
-        if hasattr(value, "symbolic"):
-            return value.symbolic
-        return False
-
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if value is tainted (user-controlled)."""
-        # Check if the value comes from user input
-        if value is None:
-            return False
-
-        # Check if value contains references to user buffers
-        value_str = str(value)
-        user_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "input_buffer", "user_buffer", "InputBuffer"]
-
-        for source in user_sources:
-            if source in value_str:
-                return True
-
-        # Check if it's a symbolic value derived from IOCTL input
-        if self._is_symbolic(value):
-            # Check if any of its variables are from user input
-            if hasattr(value, "variables"):
-                for var in value.variables:
-                    var_str = str(var)
-                    for source in user_sources:
-                        if source in var_str:
-                            return True
-
-        return False
+        return SymbolicExecutionErrorHandler.safe_symbolic_check(value)
 
     def _extract_pool_tag(self, tag: Any) -> str | None:
         """Extract pool tag as string."""
@@ -778,16 +762,6 @@ class UnifiedMemoryDetector(VulnerabilityDetector):
         # This would analyze the context to determine object type
         # For now, return generic
         return "UNKNOWN_OBJECT"
-
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get current IOCTL code."""
-        if hasattr(self.context, "io_control_code"):
-            try:
-                ioctl = state.solver.eval_one(self.context.io_control_code)
-                return hex(ioctl)
-            except:
-                pass
-        return "0x0"
 
     def get_statistics(self) -> dict[str, Any]:
         """Get memory tracking statistics."""

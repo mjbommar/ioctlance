@@ -14,6 +14,7 @@ from angr import SimState
 
 from ..core.analysis_context import AnalysisContext
 from ..utils.helpers import safe_hex, get_state_globals
+from ..utils.error_handler import SymbolicExecutionErrorHandler
 from .base import VulnerabilityDetector, detector_registry
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,32 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
             address = kwargs.get("address")
             if address is not None and self._is_kernel_structure(address):
                 return self._check_kernel_write(state, address, **kwargs)
+
+        # Also handle direct calls when hooks are not available
+        if event_type in ("function_call", "call"):
+            func_name = kwargs.get("function_name") or kwargs.get("func_name")
+            if not func_name:
+                return None
+            name = str(func_name)
+            try:
+                # Arg registers on x64: RCX, RDX, R8, R9
+                rcx = getattr(state.regs, "rcx", None)
+                rdx = getattr(state.regs, "rdx", None)
+                r8 = getattr(state.regs, "r8", None)
+                if "MmMapIoSpace" in name:
+                    return self.check_mmmapiosspace(state, rcx, rdx, r8)
+                if "ZwMapViewOfSection" in name:
+                    return self.check_zwmapviewofsection(state, rcx, rdx, r8)
+                if "MmCopyMemory" in name:
+                    return self.check_mmcopymemory(state, rcx, rdx, r8)
+                if "ZwTerminateProcess" in name:
+                    return self.check_zwterminateprocess(state, rcx, rdx)
+                if "ZwOpenProcess" in name:
+                    return self.check_zwopenprocess(state, rcx, rdx, r8)
+                if "PsLookupProcessByProcessId" in name:
+                    return self.check_pslookupprocessbyprocessid(state, rcx, rdx)
+            except Exception as e:
+                logger.debug(f"Privilege escalation call check failed: {e}")
 
         return None
 
@@ -484,51 +511,13 @@ class UnifiedPrivilegeEscalationDetector(VulnerabilityDetector):
                 if rights & dangerous_right:
                     return True
 
-        except:
-            # If we can't evaluate, assume dangerous
+        except Exception as e:
+            # If we can't evaluate, assume dangerous and log
+            if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                logger.debug(f"Error evaluating access rights in _is_dangerous_access: {e}")
             return True
 
         return False
-
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if a value is tainted (user-controlled).
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if value is tainted
-        """
-        if value is None:
-            return False
-
-        # Check if symbolic
-        if hasattr(value, "symbolic") and value.symbolic:
-            return True
-
-        # Check if contains user input references
-        value_str = str(value)
-        tainted_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer", "IRP"]
-        return any(src in value_str for src in tainted_sources)
-
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get current IOCTL code from state.
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            IOCTL code as hex string
-        """
-        globals_dict = get_state_globals(state)
-        if "IoControlCode" in globals_dict:
-            return safe_hex(globals_dict["IoControlCode"])
-        elif self.context and self.context.io_control_code:
-            try:
-                return safe_hex(state.solver.eval(self.context.io_control_code))
-            except:
-                pass
-        return "0x0"
 
     def get_statistics(self) -> dict[str, Any]:
         """Get detector statistics.

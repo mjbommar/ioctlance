@@ -47,30 +47,42 @@ def analyze_single_driver(
             capture_raw_state=False,  # Keep lightweight for batch processing
         )
 
-        if safe_mode:
-            # Use safe analyzer with conservative settings
-            from .safe_analyzer import analyze_driver_safe_with_unified_output
+        # Unified configuration path - no more separate safe_mode handling
+        if profile and safe_mode:
+            # Use profile configuration when specified
+            try:
+                config = AnalysisConfig.from_profile(profile)
+            except ValueError as e:
+                if verbose:
+                    logger.warning(f"{e}. Using 'fast' profile.")
+                config = AnalysisConfig.fast()
 
-            unified_result = analyze_driver_safe_with_unified_output(
-                driver_path, profile=profile, timeout_override=timeout, verbose=verbose, output_manager=output_manager
-            )
-            return unified_result
+            # Apply timeout override if different from profile
+            if timeout != config.timeout:
+                scale = timeout / config.timeout
+                config.timeout = timeout
+                config.ioctl_timeout = int(config.ioctl_timeout * scale)
         else:
-            # Original analysis mode with unified output
-            config = AnalysisConfig(timeout=timeout, debug=False, verbose=verbose)
-            context = AnalysisContext.create_for_driver(driver_path, config, output_manager=output_manager)
+            # Use default configuration with specified timeout
+            config = AnalysisConfig(timeout=timeout)
 
-            analyzer = DriverAnalyzer(context)
-            result = analyzer.analyze()
+        # Apply verbose settings
+        config.verbose = verbose
+        config.debug = verbose
 
-            # Calculate analysis time and create unified result
-            analysis_time = time.time() - start_time
-            unified_result = output_manager.create_result(raw_result=result, analysis_time=analysis_time)
+        # Single analysis path for all modes
+        context = AnalysisContext.create_for_driver(driver_path, config, output_manager=output_manager)
+        analyzer = DriverAnalyzer(context)
+        result = analyzer.analyze()
 
-            if verbose:
-                logger.info(f"Completed analysis of {driver_path.name} in {analysis_time:.2f}s")
+        # Calculate analysis time and create unified result
+        analysis_time = time.time() - start_time
+        unified_result = output_manager.create_result(raw_result=result, analysis_time=analysis_time)
 
-            return unified_result
+        if verbose:
+            logger.info(f"Completed analysis of {driver_path.name} in {analysis_time:.2f}s")
+
+        return unified_result
 
     except Exception as e:
         if verbose:

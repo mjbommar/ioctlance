@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from .driver import DriverInfo, IOCTLHandler
 from .vulnerability import Vulnerability
 from .binary_metadata import CompleteMetadata
+from ..__version__ import __version__
 
 
 class PerformanceMetrics(BaseModel):
@@ -43,7 +44,7 @@ class AnalysisResult(BaseModel):
     ioctl_handler: IOCTLHandler | None = Field(None, description="IOCTL handler details")
     analysis_time: float | None = Field(None, description="Total analysis time in seconds")
     analysis_date: datetime = Field(default_factory=datetime.now, description="Analysis timestamp")
-    ioctlance_version: str = Field(default="0.2.0", description="IOCTLance version used")
+    ioctlance_version: str = Field(default=__version__, description="IOCTLance version used")
 
     # Binary metadata from binary-inspector
     binary_metadata: CompleteMetadata | None = Field(None, description="Complete binary metadata and PE analysis")
@@ -71,10 +72,14 @@ class AnalysisResult(BaseModel):
     def to_json_compatible(self) -> dict[str, Any]:
         """Convert to JSON-compatible dictionary matching original format."""
         return {
-            "basic": self.basic.model_dump(),
-            "vuln": [v.model_dump(exclude={"discovered_at"}) for v in self.vuln],
+            "basic": self.basic.model_dump(exclude_none=True),
+            "vuln": [v.model_dump(exclude={"discovered_at"}, exclude_none=True) for v in self.vuln],
             "error": self.error,
         }
+
+    def to_json_rich(self) -> dict[str, Any]:
+        """Rich JSON format including extended fields for CI/CD integration."""
+        return self.model_dump(exclude_none=True)
 
     @classmethod
     def from_legacy_format(cls, data: dict[str, Any]) -> "AnalysisResult":

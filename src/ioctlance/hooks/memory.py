@@ -199,6 +199,31 @@ class HookMmFreeContiguousMemory(BaseHook):
         return None
 
 
+class HookMmCopyMemory(BaseHook):
+    """Hook for MmCopyMemory to notify detectors of arbitrary copy semantics."""
+
+    def run(self, TargetAddress, SourceAddress, NumberOfBytes, *args):
+        context = self.get_context()
+        if context:
+            for detector in getattr(context, "detectors", []) or []:
+                try:
+                    if hasattr(detector, "check_state"):
+                        vuln = detector.check_state(
+                            self.state,
+                            "call",
+                            func_name="MmCopyMemory",
+                            target_address=TargetAddress,
+                            source_address=SourceAddress,
+                            number_of_bytes=NumberOfBytes,
+                        )
+                        if vuln:
+                            context.add_vulnerability(vuln)
+                except Exception:
+                    continue
+        # Return STATUS_SUCCESS
+        return 0
+
+
 def register_hooks(project) -> None:
     """Register hooks with the project.
 
@@ -206,13 +231,7 @@ def register_hooks(project) -> None:
         project: angr project to register hooks with
     """
     # Get calling convention
-    import archinfo
-    from angr.calling_conventions import SimCCMicrosoftAMD64, SimCCStdcall
-
-    if project.arch.name == archinfo.ArchX86.name:
-        cc = SimCCStdcall(project.arch)
-    else:
-        cc = SimCCMicrosoftAMD64(project.arch)
+    cc = BaseHook.get_calling_convention(project)
 
     hooks = {
         "ProbeForRead": HookProbeForRead,
@@ -227,6 +246,7 @@ def register_hooks(project) -> None:
         "MmGetPhysicalAddress": HookMmGetPhysicalAddress,
         "MmAllocateContiguousMemory": HookMmAllocateContiguousMemory,
         "MmFreeContiguousMemory": HookMmFreeContiguousMemory,
+        "MmCopyMemory": HookMmCopyMemory,
     }
 
     for name, hook_class in hooks.items():
@@ -250,4 +270,5 @@ __all__ = [
     "HookMmGetPhysicalAddress",
     "HookMmAllocateContiguousMemory",
     "HookMmFreeContiguousMemory",
+    "HookMmCopyMemory",
 ]

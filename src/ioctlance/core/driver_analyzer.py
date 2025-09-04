@@ -16,28 +16,54 @@ from ..utils.binary_metadata import extract_complete_metadata, analyze_binary_fo
 
 # Apply runtime patches to angr
 from ..hooks.ccall_patch import apply_patches
+
 apply_patches()
 
 logger = logging.getLogger(__name__)
 
 
 class DriverAnalyzer:
-    """Orchestrates the complete driver analysis process."""
+    """Orchestrates the complete driver analysis process.
 
-    def __init__(self, context: AnalysisContext) -> None:
+    Backward-compatible constructor and analyze signature:
+    - DriverAnalyzer(AnalysisContext)
+    - DriverAnalyzer(driver_path: str | Path)
+    - analyze(timeout=...): optional legacy kwarg supported, returns dict in legacy mode
+    """
+
+    def __init__(self, context_or_path: AnalysisContext | str | Path) -> None:
         """Initialize the driver analyzer.
 
         Args:
-            context: Analysis context
+            context_or_path: Analysis context or driver path (legacy)
         """
-        self.context = context
+        from .analysis_context import AnalysisConfig, AnalysisContext
 
-    def analyze(self) -> AnalysisResult:
+        self._compat_mode = False
+        if isinstance(context_or_path, (str, Path)):
+            # Legacy path-only usage
+            self._compat_mode = True
+            # Use fast profile by default for CLI/test usage to keep analysis responsive
+            default_config = AnalysisConfig.fast()
+            self.context = AnalysisContext.create_for_driver(Path(context_or_path), default_config)
+        else:
+            self.context = context_or_path
+
+    def analyze(self, timeout: int | None = None, **kwargs) -> AnalysisResult | dict:
         """Perform complete driver analysis.
 
         Returns:
             Analysis result with all findings
         """
+        # Legacy: allow override of timeout and return dict result
+        if timeout is not None:
+            # Adjust config safely
+            try:
+                self.context.config.timeout = timeout
+                if self.context.config.ioctl_timeout > timeout:
+                    self.context.config.ioctl_timeout = timeout
+            except Exception:
+                pass
         # Track overall timing
         total_start = time.time()
 
@@ -67,9 +93,11 @@ class DriverAnalyzer:
 
         # Find driver type
         self.context.driver_type = find_driver_type(self.context.project)
-        if self.context.driver_type != "wdm":
-            logger.warning(f"Driver type {self.context.driver_type} not supported (only WDM)")
+        if self.context.driver_type not in ("wdm", "kmdf", "wdf"):
+            logger.warning(f"Driver type {self.context.driver_type} not supported (only WDM/KMDF)")
             return self._create_empty_result()
+        if self.context.driver_type in ("kmdf", "wdf"):
+            logger.info("KMDF driver detected. Experimental support enabled (heuristic WDF hooks).")
 
         # Find device names
         self.context.device_names = find_device_names(self.context.driver_path)
@@ -93,6 +121,15 @@ class DriverAnalyzer:
         handler_start_time = time.time()
         handler_start_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
+        # Enforce overall timeout across phases by shrinking per-phase budgets
+        try:
+            elapsed_total = time.time() - total_start
+            time_left = max(1, int(self.context.config.timeout - elapsed_total))
+            original_timeout = self.context.config.timeout
+            self.context.config.timeout = time_left
+        except Exception:
+            original_timeout = None
+
         ioctl_handler, handler_state = self._find_ioctl_handler()
 
         handler_time = round(time.time() - handler_start_time)
@@ -104,12 +141,38 @@ class DriverAnalyzer:
 
         logger.info(f"IOCTL handler found at: {ioctl_handler.address}")
 
+        # Phase 1.5: Probe for IOCTLs (simplified approach)
+        logger.info("Phase 1.5: Probing for IOCTL codes...")
+        discovery_start_time = time.time()
+        discovery_start_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+
+        from .ioctl_prober import IOCTLProber
+
+        prober = IOCTLProber(self.context)
+        handler_addr = int(ioctl_handler.address, 16)
+
+        # Probe for IOCTLs in the common range
+        discovered_ioctls = prober.probe_ioctl_range(handler_addr)
+
+        discovery_time = round(time.time() - discovery_start_time)
+        discovery_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - discovery_start_memory
+        logger.info(f"IOCTL probing complete: {len(discovered_ioctls)} codes found in {discovery_time}s")
+
+        # Update the handler with discovered IOCTLs
+        if discovered_ioctls:
+            ioctl_handler.ioctl_codes = discovered_ioctls.copy()
+            self.context.ioctl_codes = discovered_ioctls.copy()  # Also update context
+            logger.info(f"Updated handler with probed IOCTLs: {', '.join(sorted(discovered_ioctls))}")
+
         # Phase 2: Hunt vulnerabilities
         logger.info("Phase 2: Hunting vulnerabilities...")
         hunt_start_time = time.time()
         hunt_start_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 
         hunter = VulnerabilityHunter(self.context)
+        logger.debug(
+            f"Context id in analyzer: {id(self.context)}, vulnerabilities before hunt: {len(self.context.vulnerabilities)}"
+        )
 
         # Use handler state or blank state
         if not handler_state:
@@ -118,9 +181,33 @@ class DriverAnalyzer:
 
             handler_state = self.context.project.factory.blank_state(add_options=angr.options.resilience)
 
+        # Adjust remaining time for the hunting phase
+        try:
+            if original_timeout is not None:
+                # Restore original reference timeout
+                self.context.config.timeout = original_timeout
+            elapsed_total = time.time() - total_start
+            time_left = max(1, int(self.context.config.timeout - elapsed_total))
+            self.context.print_info(f"[BUDGET] Time left for hunting: {time_left}s")
+            # Use remaining time as the hunt budget
+            self.context.config.timeout = time_left
+        except Exception:
+            pass
+
         # Hunt for vulnerabilities
         handler_addr = int(ioctl_handler.address, 16)
         vulnerabilities = hunter.hunt(handler_state, handler_addr, self.context.config.target_ioctl)
+        logger.info(f"After hunt: returned {len(vulnerabilities)} vulnerabilities")
+        logger.info(f"Context vulnerabilities: {len(self.context.vulnerabilities)}")
+        logger.info(f"Context vuln_buffer: {len(self.context.vuln_buffer)}")
+
+        # Log first few vulnerabilities for debugging
+        if vulnerabilities:
+            for i, vuln in enumerate(vulnerabilities[:3]):
+                if isinstance(vuln, dict):
+                    logger.info(f"Vulnerability {i}: {vuln.get('title', 'No title')}")
+                else:
+                    logger.info(f"Vulnerability {i}: {vuln}")
 
         hunt_time = round(time.time() - hunt_start_time)
         hunt_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - hunt_start_memory
@@ -151,7 +238,8 @@ class DriverAnalyzer:
 
         # Convert vulnerabilities to model format
         vuln_models = []
-        for vuln_dict in vulnerabilities:
+        logger.info(f"Converting {len(vulnerabilities)} vulnerabilities to model format")
+        for i, vuln_dict in enumerate(vulnerabilities):
             try:
                 # Convert legacy format to model
                 from ..models import Vulnerability, VulnerabilityEvaluation
@@ -210,8 +298,20 @@ class DriverAnalyzer:
                     severity=severity,
                 )
                 vuln_models.append(vuln)
+                if i < 5:  # Log first few conversions for debugging
+                    logger.debug(f"Successfully converted vulnerability {i}: {vuln.title}")
             except Exception as e:
-                self.context.print_error(f"Error converting vulnerability: {e}")
+                self.context.print_error(f"Error converting vulnerability {i}: {e}")
+                if i < 5:  # Log details for first few failures
+                    logger.error(f"Failed to convert vulnerability {i}: {vuln_dict}")
+                    logger.error(f"Exception details: {e}")
+
+        logger.info(f"Converted {len(vuln_models)} of {len(vulnerabilities)} vulnerabilities successfully")
+
+        # Log first few converted models for debugging
+        if vuln_models:
+            for i, vuln_model in enumerate(vuln_models[:3]):
+                logger.info(f"Converted model {i}: {vuln_model.title}")
 
         result = AnalysisResult(
             basic=basic_info,
@@ -223,7 +323,20 @@ class DriverAnalyzer:
             binary_metadata=binary_metadata,  # Add the complete metadata
         )
 
+        logger.info(f"Created AnalysisResult with {len(result.vuln)} vulnerabilities")
+        logger.info(f"result.vulnerability_count = {result.vulnerability_count}")
         self.context.print_info(f"Analysis complete: {result.vulnerability_count} vulnerabilities found")
+
+        # Return legacy dict format if in compat mode
+        if self._compat_mode:
+            # Legacy dictionary format expected by some tests
+            return {
+                "driver": str(self.context.driver_path),
+                "ioctl_handler": result.basic.ioctl_handler if result.basic else None,
+                "ioctl_codes": result.basic.IoControlCodes if result.basic else [],
+                "vulnerabilities": [v.model_dump(exclude_none=True) for v in result.vuln],
+                "errors": result.error,
+            }
 
         return result
 
@@ -269,65 +382,3 @@ class DriverAnalyzer:
         )
 
         return AnalysisResult(basic=basic_info, vuln=[], error=self.context.error_messages)
-
-
-def analyze_driver(driver_path: Path | str, timeout: int = 120, ioctl_code: str | None = None) -> AnalysisResult:
-    """Analyze a Windows driver for vulnerabilities.
-
-    Args:
-        driver_path: Path to the driver file
-        timeout: Maximum analysis time in seconds
-        ioctl_code: Specific IOCTL code to test
-
-    Returns:
-        Analysis result with findings
-    """
-    # Create configuration
-    config = AnalysisConfig(timeout=timeout, target_ioctl=ioctl_code)
-
-    # Create context
-    context = AnalysisContext.create_for_driver(driver_path, config)
-
-    # Run analysis
-    analyzer = DriverAnalyzer(context)
-    return analyzer.analyze()
-
-
-async def analyze_driver_async(
-    driver_path: Path | str, max_time: int = 120, ioctl_code: str | None = None
-) -> AnalysisResult:
-    """Async wrapper for driver analysis.
-
-    Args:
-        driver_path: Path to the driver file
-        max_time: Maximum analysis time in seconds
-        ioctl_code: Specific IOCTL code to test
-
-    Returns:
-        Analysis result with findings
-    """
-    # Run in executor to avoid blocking
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, analyze_driver, driver_path, max_time, ioctl_code)
-
-
-def analyze_driver_with_metrics(driver_path: Path | str, timeout: int = 120) -> tuple[AnalysisResult, Any]:
-    """Analyze driver and return performance metrics.
-
-    Args:
-        driver_path: Path to the driver file
-        timeout: Maximum analysis time
-
-    Returns:
-        Tuple of (result, metrics)
-    """
-    result = analyze_driver(driver_path, timeout)
-
-    # Extract metrics from result
-    from ..models import PerformanceMetrics
-
-    metrics = PerformanceMetrics(
-        time=result.basic.time, memory=result.basic.memory, unique_addr=result.basic.unique_addr
-    )
-
-    return result, metrics

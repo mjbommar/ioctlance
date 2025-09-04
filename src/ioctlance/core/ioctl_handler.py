@@ -40,7 +40,18 @@ class IOCTLHandlerFinder:
         self.complete_mode = complete_mode
 
         # Create analysis context
-        config = AnalysisConfig(timeout=timeout, global_var_size=global_var_size, complete_mode=complete_mode)
+        # Use fast profile for short timeouts to ensure valid configuration
+        if timeout <= 30:
+            config = AnalysisConfig.fast()
+            config.timeout = timeout
+            config.ioctl_timeout = min(timeout // 2, 10)  # Ensure ioctl_timeout <= timeout
+        else:
+            config = AnalysisConfig(
+                timeout=timeout,
+                ioctl_timeout=min(timeout // 2, 60),  # Ensure ioctl_timeout <= timeout
+                global_var_size=global_var_size,
+                complete_mode=complete_mode,
+            )
         self.context = AnalysisContext.create_for_driver(self.driver_path, config)
 
         # Use context's project and attributes
@@ -311,6 +322,18 @@ class IOCTLHandlerFinder:
             self.context.print_info(f"[PHASE 1] SUCCESS: Returning handler at {handler.address}")
             # Return the first found state that has the handler
             return handler, simgr.found[0]
+
+        # KMDF fallback: if WDF hooks set an ioctl_handler in context, use it
+        try:
+            if getattr(self.context, "ioctl_handler", 0):
+                addr = int(self.context.ioctl_handler)
+                handler = IOCTLHandler(address=f"0x{addr:x}", ioctl_codes=[])
+                self.context.print_info(f"[PHASE 1] KMDF: Using EvtIoDeviceControl at 0x{addr:x}")
+                # Return current active state or initial state if available
+                state_ret = simgr.active[0] if simgr.active else initial_state
+                return handler, state_ret
+        except Exception:
+            pass
 
         logger.warning("[PHASE 1] FAILED: No IOCTL handler found")
         return None, None

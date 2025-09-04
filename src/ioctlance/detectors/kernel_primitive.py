@@ -47,7 +47,10 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
                 # Remove address, value, size from kwargs to avoid duplicate argument error
                 filtered_kwargs = {k: v for k, v in kwargs.items() if k not in ["address", "value", "size"]}
                 return self._check_arbitrary_primitive(state, address, value, size, **filtered_kwargs)
-        elif event_type == "function_call":
+        elif event_type in ("function_call", "call"):
+            # Normalize function name
+            if "function_name" not in kwargs and "func_name" in kwargs:
+                kwargs["function_name"] = kwargs.pop("func_name")
             return self._check_interlocked_operations(state, **kwargs)
 
         return None
@@ -90,7 +93,7 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
         return None
 
     def _check_interlocked_operations(
-        self, state: SimState, function_name: str, **kwargs: Any
+        self, state: SimState, function_name: str | None = None, **kwargs: Any
     ) -> dict[str, Any] | None:
         """Check for vulnerable interlocked operations.
 
@@ -116,17 +119,19 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
             "_InterlockedExchange",
         }
 
-        if function_name not in interlocked_functions:
+        if not function_name or function_name not in interlocked_functions:
             return None
 
         try:
-            # Check if target address is user-controlled
-            if hasattr(state.regs, "rcx"):
-                target_addr = state.regs.rcx  # First argument in x64
-            elif hasattr(state.regs, "rdi"):
-                target_addr = state.regs.rdi  # First argument in System V
-            else:
-                return None
+            # Prefer provided target address if passed by hooks/breakpoints
+            target_addr = kwargs.get("target_addr")
+            if target_addr is None:
+                if hasattr(state.regs, "rcx"):
+                    target_addr = state.regs.rcx  # First argument in x64
+                elif hasattr(state.regs, "rdi"):
+                    target_addr = state.regs.rdi  # First argument in System V
+                else:
+                    return None
 
             if self._is_tainted(target_addr):
                 operation = function_name.replace("Interlocked", "").replace("_", "").lower()
@@ -302,27 +307,6 @@ class KernelPrimitiveDetector(VulnerabilityDetector):
         # Check if we've seen multiple primitive operations
         # that could be combined for exploitation
         return len(self.tracked_operations) > 1
-
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if value is tainted (user-controlled).
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if tainted
-        """
-        if value is None:
-            return False
-
-        # Check for symbolic variables from user input
-        if hasattr(value, "symbolic") and value.symbolic:
-            for var in value.variables:
-                var_name = str(var).lower()
-                if "input" in var_name or "buffer" in var_name or "ioctl" in var_name:
-                    return True
-
-        return False
 
     def _create_primitive_vuln(self, state: SimState, address: Any, value: Any, primitive_type: str) -> dict[str, Any]:
         """Create kernel primitive vulnerability info.

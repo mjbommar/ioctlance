@@ -366,45 +366,6 @@ class ObjectManipulationDetector(VulnerabilityDetector):
 
         return None
 
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if a value is tainted (user-controlled).
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if value is tainted
-        """
-        if value is None:
-            return False
-
-        # Check if symbolic
-        if hasattr(value, "symbolic") and value.symbolic:
-            return True
-
-        # Check if contains user input references
-        value_str = str(value)
-        tainted_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer", "IRP"]
-        return any(src in value_str for src in tainted_sources)
-
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get current IOCTL code from state.
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            IOCTL code as hex string
-        """
-        if hasattr(state, "globals") and "IoControlCode" in state.globals:
-            return hex(state.globals["IoControlCode"])
-        elif hasattr(self.context, "io_control_code") and self.context.io_control_code:
-            try:
-                return hex(state.solver.eval_one(self.context.io_control_code))
-            except:
-                pass
-        return "0x0"
-
     def get_statistics(self) -> dict[str, Any]:
         """Get detector statistics.
 

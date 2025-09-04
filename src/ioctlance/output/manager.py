@@ -15,6 +15,7 @@ from .vulnerability_context import EnhancedVulnerability
 from ..models.analysis_result import AnalysisResult
 from ..models.vulnerability import Vulnerability
 from ..models.binary_metadata import CompleteMetadata
+from ..__version__ import __version__
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ class UnifiedAnalysisResult(BaseModel):
     analysis_id: str = Field(..., description="Unique analysis ID")
     analysis_date: datetime = Field(default_factory=datetime.now)
     analysis_time: float = Field(..., description="Total analysis time in seconds")
-    ioctlance_version: str = Field(default="0.3.0")
+    ioctlance_version: str = Field(default=__version__)
 
     # Analysis configuration
     config: dict[str, Any] = Field(default_factory=dict, description="Analysis configuration used")
@@ -193,8 +194,39 @@ class OutputManager:
             analysis_time = (datetime.now() - self.analysis_start_time).total_seconds()
 
         # Group vulnerabilities by type
+        # Use vulnerabilities from raw_result if available, otherwise from self
+        vulnerabilities_to_process = []
+        if raw_result and hasattr(raw_result, "vuln"):
+            logger.info(f"OutputManager: raw_result has 'vuln' attribute with {len(raw_result.vuln)} items")
+            # Convert raw_result vulnerabilities to EnhancedVulnerability format
+            import uuid
+
+            for i, vuln in enumerate(raw_result.vuln):
+                try:
+                    # Create a dedup key from title and eval parameters
+                    dedup_key = f"{vuln.title}_{vuln.eval.IoControlCode if vuln.eval else '0x0'}"
+                    enhanced = EnhancedVulnerability(
+                        vulnerability=vuln,
+                        first_seen=datetime.now(),
+                        dedup_key=dedup_key,
+                        instance_id=str(uuid.uuid4()),
+                        ioctl_handler_address=raw_result.basic.ioctl_handler if raw_result.basic else None,
+                        analysis_phase="phase_2",
+                    )
+                    vulnerabilities_to_process.append(enhanced)
+                    if i < 3:  # Log first few conversions
+                        logger.info(f"Converted vuln {i}: {vuln.title}")
+                except Exception as e:
+                    logger.error(f"Failed to convert vulnerability {i}: {e}")
+                    if i < 3:
+                        logger.error(f"Vulnerability data: {vuln}")
+            logger.info(f"Successfully converted {len(vulnerabilities_to_process)} vulnerabilities")
+        else:
+            logger.info(f"OutputManager: Using self.vulnerabilities ({len(self.vulnerabilities)} items)")
+            vulnerabilities_to_process = self.vulnerabilities
+
         vulnerability_groups = defaultdict(list)
-        for vuln in self.vulnerabilities:
+        for vuln in vulnerabilities_to_process:
             vuln_type = vuln.vulnerability.vulnerability_type
             vulnerability_groups[vuln_type].append(vuln)
 
@@ -231,10 +263,17 @@ class OutputManager:
         ioctl_handler_address = None
 
         if raw_result:
+            # IOCTL codes can be in basic info or in the ioctl_handler object
             if raw_result.basic.IoControlCodes:
                 ioctl_codes = raw_result.basic.IoControlCodes
+            elif raw_result.ioctl_handler and raw_result.ioctl_handler.ioctl_codes:
+                ioctl_codes = raw_result.ioctl_handler.ioctl_codes
+
+            # Handler address can be in basic info or in the ioctl_handler object
             if raw_result.basic.ioctl_handler:
                 ioctl_handler_address = raw_result.basic.ioctl_handler
+            elif raw_result.ioctl_handler and raw_result.ioctl_handler.address:
+                ioctl_handler_address = raw_result.ioctl_handler.address
 
         # Create summary
         summary = AnalysisSummary(
@@ -244,7 +283,7 @@ class OutputManager:
             analysis_date=datetime.now().isoformat(),
             ioctl_codes_found=len(ioctl_codes),
             ioctl_codes=ioctl_codes,
-            vulnerabilities_found=len(self.vulnerabilities),
+            vulnerabilities_found=len(vulnerabilities_to_process),
             unique_vulnerabilities=len(vulnerability_groups),
             severity_breakdown=dict(severity_breakdown),
             vulnerability_summary=vuln_summaries,
@@ -264,7 +303,7 @@ class OutputManager:
             summary=summary,
             ioctl_handler_address=ioctl_handler_address,
             ioctl_codes=ioctl_codes,
-            vulnerabilities=self.vulnerabilities,
+            vulnerabilities=vulnerabilities_to_process,
             vulnerability_groups=dict(vulnerability_groups),
             binary_metadata=binary_metadata,
             errors=errors or [],

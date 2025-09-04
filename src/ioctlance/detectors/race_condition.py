@@ -1,10 +1,14 @@
 """Race condition (double-fetch/TOCTOU) detector for IOCTLance."""
 
+import logging
 from typing import Any
 
 from angr import SimState
 
 from .base import VulnerabilityDetector, detector_registry
+from ..utils.error_handler import SymbolicExecutionErrorHandler
+
+logger = logging.getLogger(__name__)
 
 
 class RaceConditionDetector(VulnerabilityDetector):
@@ -20,6 +24,8 @@ class RaceConditionDetector(VulnerabilityDetector):
         # Track addresses that have been read from user space
         # Format: {address: (first_read_state_addr, first_read_value)}
         self.user_space_reads: dict[int, tuple[int, Any]] = {}
+        # Deduplication of reported double-fetch vulnerabilities
+        self._reported: set[tuple[int, int]] = set()
 
     @property
     def name(self) -> str:
@@ -58,7 +64,8 @@ class RaceConditionDetector(VulnerabilityDetector):
         Returns:
             Vulnerability info if found, None otherwise
         """
-        if event_type != "memory_read":
+        # Normalize to mem_read events as emitted by breakpoints
+        if event_type != "mem_read":
             return None
 
         address = kwargs.get("address")
@@ -70,19 +77,23 @@ class RaceConditionDetector(VulnerabilityDetector):
         # Try to get concrete address
         try:
             # Try to evaluate the address to a concrete value
-            if hasattr(address, "__class__") and hasattr(state.solver, "eval"):
-                # Check if it's symbolic and has a single solution
-                if state.solver.symbolic(address):
-                    solutions = state.solver.eval_upto(address, 2)
-                    if len(solutions) != 1:
-                        # Multiple solutions or unsolvable - can't track
-                        return None
-                    concrete_addr = solutions[0]
-                else:
-                    concrete_addr = state.solver.eval(address)
+            if SymbolicExecutionErrorHandler.safe_symbolic_check(address):
+                solutions = state.solver.eval_upto(address, 2)
+                if len(solutions) != 1:
+                    # Multiple solutions or unsolvable - can't track
+                    return None
+                concrete_addr = solutions[0]
             else:
-                concrete_addr = int(address)
-        except Exception:
+                # Safe evaluation for non-symbolic values
+                concrete_addr = (
+                    SymbolicExecutionErrorHandler.safe_eval(state, address, default=None)
+                    if hasattr(state, "solver")
+                    else int(address)
+                )
+            # Ensure it's an int
+            concrete_addr = int(concrete_addr) if concrete_addr is not None else None
+        except Exception as e:
+            logger.debug(f"RaceConditionDetector: failed to concretize address: {e}")
             return None
 
         # Check if this is a user-space address
@@ -103,6 +114,11 @@ class RaceConditionDetector(VulnerabilityDetector):
             if (tracked_addr <= concrete_addr < tracked_end) or (concrete_addr <= tracked_addr < current_end):
                 # Double-fetch detected!
                 first_state_addr = self.user_space_reads[tracked_addr][0]
+                # Deduplicate per concrete address and current basic block site
+                report_key = (tracked_addr, state.addr if hasattr(state, "addr") else 0)
+                if report_key in self._reported:
+                    return None
+                self._reported.add(report_key)
 
                 return self.create_vulnerability_info(
                     title="Double-Fetch Race Condition",
@@ -143,18 +159,21 @@ class RaceConditionDetector(VulnerabilityDetector):
         # This can be called by ProbeForRead hooks to help detect
         # the pattern: ProbeForRead -> use data -> use data again (TOCTOU)
         try:
-            if hasattr(probe_addr, "symbolic") and probe_addr.symbolic:
+            if SymbolicExecutionErrorHandler.safe_symbolic_check(probe_addr):
                 return
 
-            concrete_addr = state.solver.eval(probe_addr) if hasattr(probe_addr, "__class__") else int(probe_addr)
-            concrete_size = state.solver.eval(probe_size) if hasattr(probe_size, "__class__") else int(probe_size)
+            concrete_addr = SymbolicExecutionErrorHandler.safe_eval(state, probe_addr, default=None)
+            concrete_size = SymbolicExecutionErrorHandler.safe_eval(state, probe_size, default=0)
+
+            if concrete_addr is None:
+                return
 
             # Mark this region as "probed" - any subsequent double-read is highly suspicious
             state_addr = state.addr if hasattr(state, "addr") else 0
-            self.user_space_reads[concrete_addr] = (state_addr, concrete_size)
+            self.user_space_reads[int(concrete_addr)] = (state_addr, int(concrete_size))
 
-        except:
-            pass
+        except Exception as e:
+            logger.debug(f"RaceConditionDetector: failed to record ProbeForRead pattern: {e}")
 
 
 # Register the detector

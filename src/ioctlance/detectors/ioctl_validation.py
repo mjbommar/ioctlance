@@ -126,8 +126,13 @@ class IOCTLValidationDetector(VulnerabilityDetector):
             Vulnerability info if detected
         """
         # Get IOCTL code
-        ioctl_code = self._get_ioctl_code(state)
-        if ioctl_code is None or ioctl_code == 0:
+        ioctl_code_str = self._get_ioctl_code(state)
+        if ioctl_code_str == "0x0":
+            return None
+
+        try:
+            ioctl_code = int(ioctl_code_str, 16) if isinstance(ioctl_code_str, str) else ioctl_code_str
+        except (ValueError, TypeError):
             return None
 
         # Decode IOCTL
@@ -233,12 +238,18 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         address = kwargs.get("address")
         size = kwargs.get("size")
 
-        if address is None or not size:
+        if address is None or size is None:
             return None
 
         # Get current IOCTL
-        ioctl_code = self._get_ioctl_code(state)
-        if ioctl_code is None or ioctl_code not in self.seen_ioctls:
+        ioctl_code_str = self._get_ioctl_code(state)
+        if ioctl_code_str == "0x0":
+            return None
+        try:
+            ioctl_code = int(ioctl_code_str, 16) if isinstance(ioctl_code_str, str) else ioctl_code_str
+        except (ValueError, TypeError):
+            return None
+        if ioctl_code not in self.seen_ioctls:
             return None
 
         ioctl_info = self.seen_ioctls[ioctl_code]
@@ -322,8 +333,14 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         Returns:
             Vulnerability info if detected
         """
-        ioctl_code = self._get_ioctl_code(state)
-        if ioctl_code is None or ioctl_code not in self.seen_ioctls:
+        ioctl_code_str = self._get_ioctl_code(state)
+        if ioctl_code_str == "0x0":
+            return None
+        try:
+            ioctl_code = int(ioctl_code_str, 16) if isinstance(ioctl_code_str, str) else ioctl_code_str
+        except (ValueError, TypeError):
+            return None
+        if ioctl_code not in self.seen_ioctls:
             return None
 
         ioctl_info = self.seen_ioctls[ioctl_code]
@@ -405,24 +422,6 @@ class IOCTLValidationDetector(VulnerabilityDetector):
         if hasattr(value, "symbolic"):
             return value.symbolic
         return False
-
-    def _get_ioctl_code(self, state: SimState) -> int:
-        """Get current IOCTL code from state.
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            IOCTL code as integer, 0 if not found
-        """
-        if hasattr(state, "globals") and "IoControlCode" in state.globals:
-            return state.globals["IoControlCode"]
-        elif hasattr(self.context, "io_control_code") and self.context.io_control_code is not None:
-            try:
-                return state.solver.eval_one(self.context.io_control_code)
-            except:
-                pass
-        return 0
 
     def get_statistics(self) -> dict[str, Any]:
         """Get detector statistics.

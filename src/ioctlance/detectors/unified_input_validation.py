@@ -15,6 +15,7 @@ from angr import SimState
 
 from ..core.analysis_context import AnalysisContext
 from ..utils.helpers import safe_hex, get_state_globals
+from ..utils.error_handler import SymbolicExecutionErrorHandler
 from .base import VulnerabilityDetector, detector_registry
 
 logger = logging.getLogger(__name__)
@@ -71,7 +72,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
             # Also check for size mismatch (from probe_bypass)
             address = kwargs.get("address")
             size = kwargs.get("size")
-            if address is not None and size:
+            if address is not None and size is not None:
                 vuln = self._check_memory_access(state, address, size, event_type == "mem_write")
                 if vuln:
                     return vuln
@@ -159,9 +160,9 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
 
             elif target in ("Type3InputBuffer", "UserBuffer"):
                 # Check if Type3InputBuffer or UserBuffer is controllable
-                if target == "Type3InputBuffer" and self.context.type3_input_buffer:
+                if target == "Type3InputBuffer" and self.context.type3_input_buffer is not None:
                     tmp_state.solver.add(self.context.type3_input_buffer == 0x41414141)
-                elif target == "UserBuffer" and self.context.user_buffer:
+                elif target == "UserBuffer" and self.context.user_buffer is not None:
                     tmp_state.solver.add(self.context.user_buffer == 0x41414141)
                 else:
                     continue
@@ -235,7 +236,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
         # Check for zero-length bypass
         try:
             if hasattr(length, "concrete"):
-                length_val = state.solver.eval_one(length)
+                length_val = SymbolicExecutionErrorHandler.safe_eval(state, length, 0)
             else:
                 length_val = int(length) if length is not None else 0
 
@@ -312,7 +313,7 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
         # Check for zero-length bypass
         try:
             if hasattr(length, "concrete"):
-                length_val = state.solver.eval_one(length)
+                length_val = SymbolicExecutionErrorHandler.safe_eval(state, length, 0)
             else:
                 length_val = int(length) if length is not None else 0
 
@@ -343,7 +344,11 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
             # Check if address is user-controlled but in kernel space
             if self._is_tainted(address):
                 try:
-                    addr_val = state.solver.eval_one(address) if hasattr(address, "concrete") else address
+                    addr_val = (
+                        SymbolicExecutionErrorHandler.safe_eval(state, address, address)
+                        if hasattr(address, "concrete")
+                        else address
+                    )
                     # Check if address is in kernel space (high bit set on x64)
                     if addr_val >= 0xFFFF000000000000:
                         vuln_key = (
@@ -370,8 +375,9 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                                 "mitigation": "Validate address is in user space",
                             },
                         )
-                except:
-                    pass
+                except Exception as e:
+                    if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                        logger.debug(f"Error evaluating kernel address in _check_probe_for_write: {e}")
 
             # Track this probe for later comparison
             self.probed_addresses[state_id].append({"address": address, "length": length, "type": "write"})
@@ -458,7 +464,9 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                 val2 = addr2.solver.eval_one(addr2) if hasattr(addr2, "solver") else addr2
 
             return val1 == val2
-        except:
+        except Exception as e:
+            if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                logger.debug(f"Error comparing addresses in _addresses_match: {e}")
             return False
 
     def _sizes_match(self, size1: Any, size2: Any) -> bool:
@@ -481,49 +489,10 @@ class UnifiedInputValidationDetector(VulnerabilityDetector):
                 val2 = size2.solver.eval_one(size2) if hasattr(size2, "solver") else size2
 
             return val1 == val2
-        except:
+        except Exception as e:
+            if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                logger.debug(f"Error comparing sizes in _sizes_match: {e}")
             return False
-
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if a value is tainted (user-controlled).
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if value is tainted
-        """
-        if value is None:
-            return False
-
-        if hasattr(value, "symbolic"):
-            return value.symbolic
-        elif hasattr(value, "variables"):
-            return len(value.variables) > 0
-
-        # Check string representation for user buffers
-        value_str = str(value)
-        tainted_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer", "OutputBuffer"]
-        return any(src in value_str for src in tainted_sources)
-
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get IOCTL code from state if available.
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            IOCTL code as hex string or '0x0'
-        """
-        globals_dict = get_state_globals(state)
-        if "IoControlCode" in globals_dict:
-            return safe_hex(globals_dict["IoControlCode"])
-        elif self.context and self.context.io_control_code:
-            try:
-                return safe_hex(state.solver.eval(self.context.io_control_code))
-            except:
-                pass
-        return "0x0"
 
     def get_statistics(self) -> dict[str, Any]:
         """Get detector statistics.

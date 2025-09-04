@@ -100,12 +100,17 @@ Examples:
     # Adjust timeout based on profile if specified
     timeout = args.timeout
     if args.profile:
-        from .batch.safe_analyzer import ANALYSIS_PROFILES
+        from .core.analysis_context import AnalysisConfig
 
-        if args.profile in ANALYSIS_PROFILES:
-            timeout = ANALYSIS_PROFILES[args.profile]["timeout"]
+        try:
+            profile_config = AnalysisConfig.from_profile(args.profile)
+            timeout = profile_config.timeout
             if args.verbose:
                 console.print(f"[cyan]Using profile '{args.profile}' with {timeout}s timeout[/cyan]")
+        except ValueError:
+            # Keep user-specified timeout if profile is invalid
+            if args.verbose:
+                console.print(f"[yellow]Unknown profile '{args.profile}', using default timeout[/yellow]")
 
     # Create batch configuration
     config = BatchConfig(

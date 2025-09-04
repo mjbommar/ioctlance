@@ -2,10 +2,8 @@
 
 import hashlib
 import logging
-import os
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +14,6 @@ from ..models.binary_metadata import (
     ExportedFunction,
     Section,
     DataDirectory,
-    Resource,
-    Certificate,
-    VersionInfo,
     RichHeader,
     DebugInfo,
     DotNetMetadata,

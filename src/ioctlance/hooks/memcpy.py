@@ -5,6 +5,8 @@ from typing import Any
 
 import angr
 
+from ..utils.error_handler import SymbolicExecutionErrorHandler
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,8 +33,8 @@ class MemcpyHook(angr.SimProcedure):
 
         # FIRST: Check for controllable addresses (arbitrary read/write)
         # This is different from buffer overflow - it's about WHERE, not HOW MUCH
-        dst_tainted = self._is_tainted(dst)
-        src_tainted = self._is_tainted(src)
+        dst_tainted = self._is_tainted_safe(dst)
+        src_tainted = self._is_tainted_safe(src)
 
         if (dst_tainted or src_tainted) and context:
             # Get IOCTL code if available
@@ -75,14 +77,10 @@ class MemcpyHook(angr.SimProcedure):
                 f"{'Arbitrary write' if dst_tainted else 'Arbitrary read'} primitive"
             )
 
-        # Check if size is symbolic (tainted)
-        is_symbolic_size = False
-        if hasattr(size, "symbolic"):
-            is_symbolic_size = size.symbolic
-        elif hasattr(size, "variables"):
-            is_symbolic_size = len(size.variables) > 0
+        # Check if size is symbolic (tainted) - use safe check to avoid ClaripyOperationError
+        is_symbolic_size = SymbolicExecutionErrorHandler.safe_symbolic_check(size)
 
-        # Get concrete or max size for the actual copy
+        # Get concrete or max size for the actual copy - use safe evaluation
         try:
             if is_symbolic_size:
                 # For symbolic size, get the maximum possible value (capped at reasonable limit)
@@ -95,8 +93,9 @@ class MemcpyHook(angr.SimProcedure):
                 if context and context.config.debug:
                     logger.debug(f"memcpy with symbolic size (max={max_size})")
             else:
-                concrete_size = self.state.solver.eval_one(size)
-        except:
+                concrete_size = SymbolicExecutionErrorHandler.safe_eval(self.state, size, 0x100)
+        except Exception as e:
+            logger.debug(f"Error evaluating memcpy size: {e}")
             concrete_size = 0x100  # Default fallback
 
         # Trigger memory write breakpoint with size information
@@ -109,18 +108,11 @@ class MemcpyHook(angr.SimProcedure):
 
             # For symbolic size or large copies, explicitly check for stack overflow
             if is_symbolic_size or concrete_size > 256:
-                # Check if destination is on stack
+                # Check if destination is on stack - use safe evaluation
                 stack_pointer = self.state.regs.rsp if hasattr(self.state.regs, "rsp") else self.state.regs.sp
                 try:
-                    if hasattr(dst, "concrete"):
-                        dst_concrete = self.state.solver.eval_one(dst)
-                    else:
-                        dst_concrete = dst
-
-                    if hasattr(stack_pointer, "concrete"):
-                        sp_concrete = self.state.solver.eval_one(stack_pointer)
-                    else:
-                        sp_concrete = stack_pointer
+                    dst_concrete = SymbolicExecutionErrorHandler.safe_eval(self.state, dst, 0)
+                    sp_concrete = SymbolicExecutionErrorHandler.safe_eval(self.state, stack_pointer, 0)
 
                     # Check if destination is in stack range
                     max_stack_size = 1024 * 1024  # 1MB
@@ -160,8 +152,8 @@ class MemcpyHook(angr.SimProcedure):
 
         return dst
 
-    def _is_tainted(self, value):
-        """Check if a value is tainted (user-controlled).
+    def _is_tainted_safe(self, value):
+        """Check if a value is tainted (user-controlled) using centralized safe checks.
 
         Args:
             value: Value to check for taint
@@ -171,15 +163,25 @@ class MemcpyHook(angr.SimProcedure):
         """
         if value is None:
             return False
-        if hasattr(value, "symbolic"):
-            return value.symbolic
+
+        # Use the centralized safe symbolic check first
+        if not SymbolicExecutionErrorHandler.safe_symbolic_check(value):
+            return False
+
+        # If it's symbolic, check if any variable comes from user input
         if hasattr(value, "variables"):
-            # Check if any variable comes from user input
-            for var in value.variables:
-                if any(
-                    target in str(var) for target in ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer"]
-                ):
-                    return True
+            try:
+                for var in value.variables:
+                    if any(
+                        target in str(var)
+                        for target in ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "InputBuffer"]
+                    ):
+                        return True
+            except Exception as e:
+                logger.debug(f"Error checking variable taint: {e}")
+                # If we can't check variables safely, assume it might be tainted if it's symbolic
+                return True
+
         return False
 
 
@@ -266,4 +268,7 @@ def register_hooks(project: angr.Project) -> None:
                             hooked_addrs.add(plt_addr)
 
     except Exception as e:
-        logger.warning(f"Failed to hook imports: {e}")
+        if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+            logger.warning(f"Failed to hook imports: {e}")
+        else:
+            logger.debug(f"Non-fatal error hooking imports: {e}")

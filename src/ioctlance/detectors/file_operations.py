@@ -323,42 +323,6 @@ class FileOperationDetector(VulnerabilityDetector):
 
         return None
 
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if a value is tainted (user-controlled).
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if value is tainted
-        """
-        if value is None:
-            return False
-        if hasattr(value, "symbolic"):
-            return value.symbolic
-        elif hasattr(value, "variables"):
-            return len(value.variables) > 0
-        return False
-
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get IOCTL code from state if available.
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            IOCTL code as hex string or '0x0'
-        """
-        globals_dict = get_state_globals(state)
-        if "IoControlCode" in globals_dict:
-            return safe_hex(globals_dict["IoControlCode"])
-        elif self.context and self.context.io_control_code:
-            try:
-                return safe_hex(state.solver.eval(self.context.io_control_code))
-            except:
-                pass
-        return "0x0"
-
 
 # Register the detector
 detector_registry.register(FileOperationDetector)

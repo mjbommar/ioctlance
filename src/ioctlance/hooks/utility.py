@@ -15,7 +15,25 @@ class HookVsnprintf(BaseHook):
     """Hook for vsnprintf - formatted string output."""
 
     def run(self, buffer, count, format, argptr) -> int:
-        """Stub implementation of vsnprintf."""
+        """Call detectors for format string analysis and return success."""
+        context = self.get_context()
+        if context:
+            for detector in getattr(context, "detectors", []) or []:
+                if hasattr(detector, "check_state") and detector.enabled:
+                    try:
+                        result = detector.check_state(
+                            self.state,
+                            "call",
+                            func_name="vsnprintf",
+                            buffer=buffer,
+                            size=count,
+                            format_str=format,
+                            args=argptr,
+                        )
+                        if result:
+                            context.add_vulnerability(result)
+                    except Exception:
+                        continue
         return 0
 
 
@@ -37,17 +55,12 @@ def register_hooks(project) -> None:
         project: angr project to register hooks with
     """
     # Get calling convention
-    import archinfo
-    from angr.calling_conventions import SimCCMicrosoftAMD64, SimCCStdcall
-
-    if project.arch.name == archinfo.ArchX86.name:
-        cc = SimCCStdcall(project.arch)
-    else:
-        cc = SimCCMicrosoftAMD64(project.arch)
+    cc = BaseHook.get_calling_convention(project)
 
     hooks = {
         "DoNothing": HookDoNothing,
         "Vsnprintf": HookVsnprintf,
+        "vsnprintf": HookVsnprintf,
         "FltGetRoutineAddress": HookFltGetRoutineAddress,
     }
 

@@ -51,7 +51,8 @@ class OpcodeScanner:
         # Privileged instructions
         r"wrmsr": ("wrmsr", 2),
         r"rdpmc": ("rdpmc", 2),
-        r"[ \t]*int[ \t]*": ("int", 2),
+        # DISABLED: int hook creates thousands of false positives
+        # r"[ \t]*int[ \t]*": ("int", 2),
         # String operations that can overflow
         r"rep movsb": ("rep_movsb", 2),
         r"rep movsw": ("rep_movsw", 3),

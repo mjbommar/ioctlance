@@ -67,8 +67,13 @@ class FormatStringDetector(VulnerabilityDetector):
         Returns:
             Vulnerability info if found, None otherwise
         """
-        if event_type == "function_call":
-            return self._check_format_function(state, **kwargs)
+        if event_type in ("function_call", "call"):
+            # Normalize function name from hooks
+            fn = kwargs.get("function_name") or kwargs.get("func_name")
+            # Remove potential duplicates
+            kwargs.pop("function_name", None)
+            kwargs.pop("func_name", None)
+            return self._check_format_function(state, function_name=fn, **kwargs)
         elif event_type == "mem_write":
             # Track when user data is written to buffers
             address = kwargs.get("address")
@@ -92,6 +97,29 @@ class FormatStringDetector(VulnerabilityDetector):
         if function_name not in self.PRINTF_FUNCTIONS:
             return None
 
+        # Prefer explicit parameters if provided by hooks
+        if "format_str" in kwargs:
+            fmt_ptr = kwargs.get("format_str")
+            try:
+                from ..utils.error_handler import SymbolicExecutionErrorHandler
+
+                # 1) Treat symbolic pointer as tainted
+                if self._is_tainted(fmt_ptr) or SymbolicExecutionErrorHandler.safe_symbolic_check(fmt_ptr):
+                    return self._create_format_string_vuln(state, function_name, fmt_ptr)
+                # 2) If pointer concretizes to an address we've seen tainted writes to, treat as tainted
+                try:
+                    if hasattr(fmt_ptr, "concrete"):
+                        addr = state.solver.eval(fmt_ptr)
+                        if addr in self.tainted_strings:
+                            return self._create_format_string_vuln(state, function_name, fmt_ptr)
+                except Exception:
+                    pass
+                # 3) Finally, scan for dangerous specifiers
+                if self._contains_dangerous_specifiers(state, fmt_ptr):
+                    return self._create_format_string_vuln(state, function_name, fmt_ptr, dangerous_specifiers=True)
+            except Exception as e:
+                logger.debug(f"Format string explicit arg check failed: {e}")
+
         # Get format string argument position based on function
         format_arg_pos = self._get_format_arg_position(function_name)
 
@@ -110,7 +138,10 @@ class FormatStringDetector(VulnerabilityDetector):
                     format_arg = state.memory.load(state.regs.rsp + stack_offset, 8)
 
                 # Check if format string pointer is tainted
-                if self._is_tainted(format_arg):
+                from ..utils.error_handler import SymbolicExecutionErrorHandler
+
+                # Treat symbolic pointers as potentially tainted in absence of explicit taint
+                if self._is_tainted(format_arg) or SymbolicExecutionErrorHandler.safe_symbolic_check(format_arg):
                     return self._create_format_string_vuln(state, function_name, format_arg)
 
                 # Check if format string itself contains dangerous specifiers
@@ -163,36 +194,6 @@ class FormatStringDetector(VulnerabilityDetector):
             return 2
         else:
             return 1  # Default to second argument
-
-    def _is_tainted(self, value: Any) -> bool:
-        """Check if a value is tainted (comes from user input).
-
-        Args:
-            value: Value to check
-
-        Returns:
-            True if tainted, False otherwise
-        """
-        if value is None:
-            return False
-
-        # Check if value has symbolic variables
-        if hasattr(value, "symbolic") and value.symbolic:
-            # Check if any symbolic variable is from IOCTL input
-            for var in value.variables:
-                if "input" in var.lower() or "ioctl" in var.lower() or "user" in var.lower():
-                    return True
-
-        # Check if concrete value points to tainted memory
-        try:
-            if hasattr(value, "concrete"):
-                concrete_val = self.context.state.solver.eval(value)
-                if concrete_val in self.tainted_strings:
-                    return True
-        except:
-            pass
-
-        return False
 
     def _is_from_ioctl_input(self, value: Any) -> bool:
         """Check if value originates from IOCTL input.

@@ -140,13 +140,7 @@ def register_hooks(project) -> None:
         project: angr project to register hooks with
     """
     # Get calling convention
-    import archinfo
-    from angr.calling_conventions import SimCCMicrosoftAMD64, SimCCStdcall
-
-    if project.arch.name == archinfo.ArchX86.name:
-        cc = SimCCStdcall(project.arch)
-    else:
-        cc = SimCCMicrosoftAMD64(project.arch)
+    cc = BaseHook.get_calling_convention(project)
 
     hooks = {
         "ExInitializeResourceLite": HookExInitializeResourceLite,

@@ -162,7 +162,8 @@ struct _DEVICE_OBJECT;
 struct _DRIVER_OBJECT;
 struct _IO_STACK_LOCATION;
 
-// #########################   TODO: ONLY HALF THE STRUCT HERE COZ WE DON'T CARE!!!!!!!
+// NOTE: Partial structure definition intentionally included for our analysis needs.
+// Fields below are sufficient for IOCTL handler discovery and buffer tracking.
 typedef struct _DEVICE_OBJECT {
   CSHORT                   Type;
   USHORT                   Size;

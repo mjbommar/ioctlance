@@ -1,8 +1,6 @@
 """Helper utilities for IOCTLance analysis."""
 
-import json
 import re
-import subprocess
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, cast
@@ -94,73 +92,6 @@ def is_tainted_buffer(symbolic_var: Any) -> str:
     return ""
 
 
-def analyze_object_attributes(
-    context: AnalysisContext, func_name: str, state: SimState, object_attributes_addr: int
-) -> None:
-    """Analyze ObjectAttributes structure for vulnerabilities.
-
-    Args:
-        context: Analysis context
-        func_name: Name of the function being analyzed
-        state: Current simulation state
-        object_attributes_addr: Address of ObjectAttributes structure
-    """
-    # Access ObjectAttributes structure
-    object_name = state.mem[object_attributes_addr].struct._OBJECT_ATTRIBUTES.ObjectName.resolved
-    attributes = state.mem[object_attributes_addr].struct._OBJECT_ATTRIBUTES.Attributes.resolved
-    buffer = state.mem[object_name].struct._UNICODE_STRING.Buffer.resolved
-
-    tmp_state = state.copy()
-
-    # Attributes is not OBJ_FORCE_ACCESS_CHECK (0x400)
-    tmp_state.solver.add(attributes & 0x400 == 0)
-
-    # Check if the ObjectName is controllable
-    buffer_content = state.memory.load(buffer, 0x80)
-
-    if tmp_state.satisfiable() and (
-        str(state.mem[object_name].struct._UNICODE_STRING.Buffer.resolved)
-        in state.globals.get("tainted_unicode_strings", ())
-        or is_tainted_buffer(buffer_content)
-    ):
-        ret_addr = hex(state.callstack.ret_addr) if state.callstack else "0x0"
-
-        vuln_info = {
-            "title": "ObjectName in ObjectAttributes controllable",
-            "description": func_name,
-            "state": state,  # Pass the actual state object
-            "state_str": str(state),  # Keep string version for backward compatibility
-            "parameters": {
-                "ObjectAttributes": {
-                    "ObjectName": str(object_name),
-                    "ObjectName.Buffer": str(buffer_content.reversed),
-                    "Attributes": str(attributes),
-                }
-            },
-            "others": {"return_address": ret_addr},
-        }
-
-        context.add_vulnerability(vuln_info)
-        context.print_info(f"Vulnerability found: {vuln_info['title']}")
-
-
-def find_utf16le_string(data: bytes, search_string: str) -> int:
-    """Find UTF-16LE encoded string in binary data.
-
-    Args:
-        data: Binary data to search
-        search_string: String to find (will be encoded as UTF-16LE)
-
-    Returns:
-        Position of the string if found, -1 otherwise
-    """
-    try:
-        encoded = search_string.encode("utf-16le")
-        return data.find(encoded)
-    except UnicodeEncodeError:
-        return -1
-
-
 @lru_cache(maxsize=128)
 def _find_device_names_cached(driver_path_str: str, file_size: int, file_mtime: float) -> tuple[str, ...]:
     """Internal cached implementation of device name extraction.
@@ -197,14 +128,7 @@ def _find_device_names_cached(driver_path_str: str, file_size: int, file_mtime: 
             except:
                 pass
 
-    # Also check for UTF-16LE encoded names
-    common_prefixes = ["\\Device\\", "\\DosDevices\\", "\\??\\"]
-    for prefix in common_prefixes:
-        pos = find_utf16le_string(data, prefix)
-        if pos >= 0:
-            # Try to extract the full device name
-            # This is simplified - real implementation would be more robust
-            pass
+    # Note: UTF-16LE encoded names checking was removed as part of cleanup
 
     return tuple(device_names)  # Return tuple for hashability
 
@@ -281,73 +205,3 @@ def find_driver_type(project: angr.Project) -> str:
             return "umdf"
 
     return "unknown"
-
-
-def print_eval_buffers(context: AnalysisContext, state: SimState, max_solutions: int = 5) -> dict[str, list[str]]:
-    """Evaluate and print symbolic buffer values.
-
-    Args:
-        context: Analysis context
-        state: Current simulation state
-        max_solutions: Maximum number of solutions to evaluate
-
-    Returns:
-        Dictionary mapping buffer names to possible values
-    """
-    results = {}
-
-    buffers = {
-        "SystemBuffer": context.system_buffer,
-        "Type3InputBuffer": context.type3_input_buffer,
-        "UserBuffer": context.user_buffer,
-        "InputBufferLength": context.input_buffer_length,
-        "OutputBufferLength": context.output_buffer_length,
-        "IoControlCode": context.io_control_code,
-    }
-
-    for name, buffer in buffers.items():
-        if buffer is not None:
-            try:
-                values = state.solver.eval_upto(buffer, max_solutions)
-                results[name] = [hex(v) for v in values]
-                context.print_debug(f"{name}: {results[name]}")
-            except angr.errors.SimError:
-                results[name] = ["<unsolvable>"]
-
-    return results
-
-
-def save_analysis_result(result: dict[str, Any], output_path: Path | str) -> None:
-    """Save analysis result to JSON file.
-
-    Args:
-        result: Analysis result dictionary
-        output_path: Path to save the JSON file
-    """
-    path = Path(output_path) if isinstance(output_path, str) else output_path
-
-    with open(path, "w") as f:
-        json.dump(result, f, indent=4)
-
-
-def run_objdump(driver_path: Path | str) -> list[str]:
-    """Run objdump on a driver file to get disassembly.
-
-    Args:
-        driver_path: Path to the driver file
-
-    Returns:
-        List of disassembly lines
-    """
-    path = Path(driver_path) if isinstance(driver_path, str) else driver_path
-
-    if not path.exists():
-        return []
-
-    command = ["objdump", "--insn-width=16", "-d", str(path)]
-
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
-        return result.stdout.splitlines()
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-        return []

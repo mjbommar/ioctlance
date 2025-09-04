@@ -1,7 +1,7 @@
 """Breakpoint handlers for vulnerability detection during symbolic execution."""
 
 import logging
-from typing import Any, cast, Dict, Tuple
+from typing import Any, cast
 
 import claripy
 from angr import SimState
@@ -26,6 +26,16 @@ class SymbolicBufferCache:
 
     def get_or_create(self, key: str, state: SimState, context: AnalysisContext) -> tuple[int, Any]:
         """Get cached buffer or create new one."""
+        # Sync cache limits with runtime config if provided
+        try:
+            cfg = getattr(context, "config", None)
+            if cfg is not None:
+                if getattr(cfg, "max_symbolic_buffers", self.max_buffers) != self.max_buffers:
+                    self.max_buffers = int(cfg.max_symbolic_buffers)
+                if getattr(cfg, "max_buffer_size", self.max_size) != self.max_size:
+                    self.max_size = int(cfg.max_buffer_size)
+        except Exception:
+            pass
         if key in self.cache:
             self.hits += 1
             return self.cache[key]
@@ -37,8 +47,8 @@ class SymbolicBufferCache:
             oldest = next(iter(self.cache))
             del self.cache[oldest]
 
-        # Create smaller buffer (was 0x200, now max 0x100)
-        size = min(self.max_size, 0x100)
+        # Create smaller buffer using configured max size
+        size = min(self.max_size, 0x1000)  # hard safety upper bound
         mem = claripy.BVS(f"*{key[:32]}", 8 * size).reversed
         addr = context.next_base_addr()
         self.cache[key] = (addr, mem)
@@ -104,13 +114,37 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
         state: Current simulation state
         context: Analysis context
     """
+    # Track calls for debugging
+    if not hasattr(context, "_b_mem_read_count"):
+        context._b_mem_read_count = 0
+    context._b_mem_read_count += 1
+
+    if context.config.debug and context._b_mem_read_count <= 3:
+        try:
+            logger.info(
+                f"b_mem_read #{context._b_mem_read_count}: addr={addr}, expr={getattr(state.inspect, 'mem_read_expr', None)}, len={getattr(state.inspect, 'mem_read_length', None)}"
+            )
+        except Exception:
+            logger.info(f"b_mem_read #{context._b_mem_read_count}: <unable to stringify>")
+
+    # Guard against symbolic truthiness issues and missing inspect fields
+    addr = getattr(state.inspect, "mem_read_address", None)
+    if addr is None:
+        return
     context.print_debug(
-        f"mem_read {state}, addr={state.inspect.mem_read_address}, "
-        f"expr={state.inspect.mem_read_expr}, len={state.inspect.mem_read_length}"
+        f"mem_read {state}, addr={addr}, "
+        f"expr={getattr(state.inspect, 'mem_read_expr', None)}, len={getattr(state.inspect, 'mem_read_length', None)}"
     )
 
     # Use detectors if available
     if hasattr(context, "detectors") and context.detectors:
+        # Log once per 1000 calls to avoid spam
+        if not hasattr(context, "_detector_call_count"):
+            context._detector_call_count = 0
+        context._detector_call_count += 1
+        if context._detector_call_count <= 5 or context._detector_call_count % 1000 == 0:
+            logger.debug(f"Checking {len(context.detectors)} detectors (call #{context._detector_call_count})")
+
         for detector in context.detectors:
             if detector.enabled:
                 vuln_info = detector.check_state(
@@ -118,15 +152,41 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
                 )
                 if vuln_info:
                     context.add_vulnerability(vuln_info)
-                    logger.debug(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
+                    logger.info(f"[VULN DETECTED] {vuln_info['title']}: {vuln_info['description']}")
                     return  # Stop after first detection to avoid duplicates
+    else:
+        if not hasattr(context, "_no_detector_warned"):
+            context._no_detector_warned = True
+            logger.warning(
+                f"No detectors available! hasattr={hasattr(context, 'detectors')}, detectors={getattr(context, 'detectors', None)}"
+            )
 
     # Check each target buffer for vulnerabilities
+    # Prefer checking variable names to avoid costly stringification of full AST
+    addr_vars = set()
+    try:
+        addr_vars = getattr(addr, "variables", set()) or set()
+    except Exception:
+        addr_vars = set()
+
+    addr_str_cache = None  # Only compute if needed
+
     for target in NPD_TARGETS:
-        if target in str(state.inspect.mem_read_address):
-            asts = [i for i in state.inspect.mem_read_address.children_asts()]
-            target_base = asts[0] if len(asts) > 1 else state.inspect.mem_read_address
-            vars = state.inspect.mem_read_address.variables
+        # Match by variable names first
+        has_target = any(target in str(v) for v in addr_vars)
+        if not has_target:
+            # Fallback to string matching only if necessary
+            if addr_str_cache is None:
+                try:
+                    addr_str_cache = str(addr)
+                except Exception:
+                    addr_str_cache = ""
+            has_target = target in addr_str_cache
+        if not has_target:
+            continue
+            asts = [i for i in addr.children_asts()] if hasattr(addr, "children_asts") else []
+            target_base = asts[0] if len(asts) > 1 else addr
+            vars = getattr(addr, "variables", set())
 
             # Check if not already validated by ProbeForRead/Write
             tainted_probe_read = state.globals.get("tainted_ProbeForRead", ())
@@ -136,21 +196,21 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
             if (
                 str(target_base) not in tainted_probe_read
                 and str(target_base) not in tainted_probe_write
-                and len(vars) == 1
+                and len(vars) >= 1
             ):
                 tmp_state = state.copy()
 
                 if target == "SystemBuffer":
-                    if "*" in str(state.inspect.mem_read_address):
+                    if "*" in str(addr):
                         # SystemBuffer is a pointer - check if controllable
                         tmp_state.solver.add(tmp_state.inspect.mem_read_address == 0x87)
                         if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
                             _record_vulnerability(
                                 context,
                                 state,
-                                title="read/write controllable address",
-                                description="read",
-                                others={"read from": str(state.inspect.mem_read_address)},
+                                title="Arbitrary Read/Write - Controllable Address",
+                                description="read input buffer",
+                                others={"read from": str(addr)},
                             )
                     else:
                         # SystemBuffer is not a pointer - check for null
@@ -163,7 +223,7 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
                                 state,
                                 title="null pointer dereference - input buffer",
                                 description="read input buffer",
-                                others={"read from": str(state.inspect.mem_read_address)},
+                                others={"read from": str(addr)},
                             )
 
                 elif target in ("Type3InputBuffer", "UserBuffer"):
@@ -177,21 +237,27 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
                         _record_vulnerability(
                             context,
                             state,
-                            title=f"read/write controllable address - {target}",
+                            title=f"Arbitrary Read/Write - {target}",
                             description="read",
-                            others={"read from": str(state.inspect.mem_read_address)},
+                            others={"read from": str(addr)},
                         )
                 else:
                     # Detect null pointer in allocated memory
-                    if "+" not in str(state.inspect.mem_read_address):
-                        tmp_state.solver.add(state.inspect.mem_read_address == 0)
+                    # Attempt cheap check without full stringify
+                    addr_plus_sign = None
+                    try:
+                        addr_plus_sign = "+" in (addr_str_cache if addr_str_cache is not None else str(addr))
+                    except Exception:
+                        addr_plus_sign = False
+                    if not addr_plus_sign:
+                        tmp_state.solver.add(addr == 0)
                         if tmp_state.satisfiable():
                             _record_vulnerability(
                                 context,
                                 state,
-                                title="null pointer dereference - allocated memory",
+                                title="Null Pointer Dereference - Allocated Memory",
                                 description="read allocated memory",
-                                others={"read from": str(state.inspect.mem_read_address)},
+                                others={"read from": str(addr)},
                             )
 
             # Symbolize tainted buffer addresses for vulnerability detection
@@ -232,9 +298,12 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
         state: Current simulation state
         context: Analysis context
     """
+    addr_w = getattr(state.inspect, "mem_write_address", None)
+    if addr_w is None:
+        return
     context.print_debug(
-        f"mem_write {state}, addr={state.inspect.mem_write_address}, "
-        f"expr={state.inspect.mem_write_expr}, len={state.inspect.mem_write_length}"
+        f"mem_write {state}, addr={addr_w}, "
+        f"expr={getattr(state.inspect, 'mem_write_expr', None)}, len={getattr(state.inspect, 'mem_write_length', None)}"
     )
 
     # Use detectors if available
@@ -254,11 +323,27 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
                     return  # Stop after first detection to avoid duplicates
 
     # Check each target buffer
+    addrw_vars = set()
+    try:
+        addrw_vars = getattr(addr_w, "variables", set()) or set()
+    except Exception:
+        addrw_vars = set()
+    addrw_str_cache = None
+
     for target in NPD_TARGETS:
-        if target in str(state.inspect.mem_write_address):
-            asts = [i for i in state.inspect.mem_write_address.children_asts()]
-            target_base = asts[0] if len(asts) > 1 else state.inspect.mem_write_address
-            vars = state.inspect.mem_write_address.variables
+        has_target = any(target in str(v) for v in addrw_vars)
+        if not has_target:
+            if addrw_str_cache is None:
+                try:
+                    addrw_str_cache = str(addr_w)
+                except Exception:
+                    addrw_str_cache = ""
+            has_target = target in addrw_str_cache
+        if not has_target:
+            continue
+            asts = [i for i in addr_w.children_asts()] if hasattr(addr_w, "children_asts") else []
+            target_base = asts[0] if len(asts) > 1 else addr_w
+            vars = getattr(addr_w, "variables", set())
 
             tainted_probe_read = state.globals.get("tainted_ProbeForRead", ())
             tainted_probe_write = state.globals.get("tainted_ProbeForWrite", ())
@@ -267,21 +352,21 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
             if (
                 str(target_base) not in tainted_probe_read
                 and str(target_base) not in tainted_probe_write
-                and len(vars) == 1
+                and len(vars) >= 1
             ):
                 tmp_state = state.copy()
 
                 if target == "SystemBuffer":
-                    if "*" in str(state.inspect.mem_write_address):
+                    if "*" in str(addr_w):
                         # Arbitrary write through SystemBuffer pointer
                         tmp_state.solver.add(tmp_state.inspect.mem_write_address == 0x87)
                         if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
                             _record_vulnerability(
                                 context,
                                 state,
-                                title="arbitrary write",
+                                title="Arbitrary Write",
                                 description="write through controllable pointer",
-                                others={"write to": str(state.inspect.mem_write_address)},
+                                others={"write to": str(addr_w)},
                             )
                     else:
                         # Null pointer write
@@ -292,9 +377,9 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
                             _record_vulnerability(
                                 context,
                                 state,
-                                title="null pointer dereference - output buffer",
+                                title="Null Pointer Dereference - Output Buffer",
                                 description="write to output buffer",
-                                others={"write to": str(state.inspect.mem_write_address)},
+                                others={"write to": str(addr_w)},
                             )
 
                 elif target in ("Type3InputBuffer", "UserBuffer"):
@@ -308,21 +393,26 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
                         _record_vulnerability(
                             context,
                             state,
-                            title=f"arbitrary write - {target}",
+                            title=f"Arbitrary Write - {target}",
                             description="write through controllable pointer",
-                            others={"write to": str(state.inspect.mem_write_address)},
+                            others={"write to": str(addr_w)},
                         )
                 else:
                     # Detect null pointer in allocated memory
-                    if "+" not in str(state.inspect.mem_write_address):
-                        tmp_state.solver.add(state.inspect.mem_write_address == 0)
+                    addrw_plus_sign = None
+                    try:
+                        addrw_plus_sign = "+" in (addrw_str_cache if addrw_str_cache is not None else str(addr_w))
+                    except Exception:
+                        addrw_plus_sign = False
+                    if not addrw_plus_sign:
+                        tmp_state.solver.add(addr_w == 0)
                         if tmp_state.satisfiable():
                             _record_vulnerability(
                                 context,
                                 state,
-                                title="null pointer dereference - allocated memory",
+                                title="Null Pointer Dereference - Allocated Memory",
                                 description="write allocated memory",
-                                others={"write to": str(state.inspect.mem_write_address)},
+                                others={"write to": str(addr_w)},
                             )
 
             # Symbolize tainted buffer addresses for vulnerability detection
@@ -375,9 +465,31 @@ def b_call(state: SimState, context: AnalysisContext) -> None:
     except:
         pass
 
-    context.print_debug(
-        f"call: state={state}, ret_addr={hex(ret_addr)}, function_addr={state.inspect.function_address}"
-    )
+    func_addr = getattr(state.inspect, "function_address", None)
+    context.print_debug(f"call: state={state}, ret_addr={hex(ret_addr)}, function_addr={func_addr}")
+
+    # Resolve function name if possible (optional)
+    func_name = None
+    try:
+        if func_addr is not None and hasattr(state, "solver"):
+            conc = state.solver.eval(func_addr)
+            # Try CFG or symbol table
+            if hasattr(context, "cfg") and context.cfg and hasattr(context.cfg, "kb"):
+                func = context.cfg.kb.functions.function(conc)
+                if func and hasattr(func, "name"):
+                    func_name = func.name
+            if func_name is None and hasattr(context.project, "loader"):
+                sym = context.project.loader.find_symbol(conc)
+                if sym and hasattr(sym, "name"):
+                    func_name = sym.name
+    except Exception:
+        func_name = None
+
+    # Collect common argument registers (x64 Windows)
+    reg_rcx = getattr(state.regs, "rcx", None)
+    reg_rdx = getattr(state.regs, "rdx", None)
+    reg_r8 = getattr(state.regs, "r8", None)
+    reg_r9 = getattr(state.regs, "r9", None)
 
     # Use detectors if available
     if hasattr(context, "detectors") and context.detectors:
@@ -386,8 +498,13 @@ def b_call(state: SimState, context: AnalysisContext) -> None:
                 vuln_info = detector.check_state(
                     state,
                     "call",
-                    function_address=state.inspect.function_address,
+                    function_address=func_addr,
+                    function_name=func_name,
                     return_address=ret_addr,
+                    rcx=reg_rcx,
+                    rdx=reg_rdx,
+                    r8=reg_r8,
+                    r9=reg_r9,
                 )
                 if vuln_info:
                     # Set RIP to marker value
@@ -399,10 +516,40 @@ def b_call(state: SimState, context: AnalysisContext) -> None:
                     logger.debug(f"[VULN] {vuln_info['title']}: {vuln_info['description']}")
                     return  # Stop after first detection
 
+    # Record recent function call name for search heuristics
+    try:
+        if not hasattr(state, "globals"):
+            state.globals = {}
+        if func_name:
+            state.globals["__recent_call_name"] = func_name
+        else:
+            # Fallback: tag extern/unknown calls to signal potential sink proximity
+            conc_addr = None
+            try:
+                if func_addr is not None and hasattr(state, "solver"):
+                    conc_addr = state.solver.eval(func_addr)
+            except Exception:
+                conc_addr = None
+            if conc_addr is not None and hasattr(context, "project") and hasattr(context.project, "loader"):
+                try:
+                    obj = context.project.loader.find_object_containing(conc_addr)
+                    if obj and getattr(obj, "binary", None) != getattr(
+                        context.project.loader.main_object, "binary", None
+                    ):
+                        state.globals["__recent_call_name"] = "extern_call"
+                    else:
+                        state.globals["__recent_call_name"] = "unknown_call"
+                except Exception:
+                    state.globals["__recent_call_name"] = "unknown_call"
+            else:
+                state.globals["__recent_call_name"] = "unknown_call"
+    except Exception:
+        pass
+
     # Check if the function address to call is tainted (arbitrary shellcode execution)
     from ..utils.helpers import is_tainted_buffer
 
-    if is_tainted_buffer(state.inspect.function_address):
+    if func_addr is not None and is_tainted_buffer(func_addr):
         # Set RIP to a marker value to indicate exploitation
         if hasattr(state.regs, "rip"):
             state.regs.rip = 0x1337
@@ -412,17 +559,19 @@ def b_call(state: SimState, context: AnalysisContext) -> None:
         _record_vulnerability(
             context,
             state,
-            title="arbitrary shellcode execution",
+            title="Arbitrary Shellcode Execution",
             description="call to tainted function address",
             others={
-                "function_address": str(state.inspect.function_address),
+                "function_address": str(func_addr),
                 "return_address": hex(ret_addr),
             },
         )
 
     # If function address has multiple solutions, skip the call to avoid path explosion
     try:
-        possible_addrs = state.solver.eval_upto(state.inspect.function_address, 2)
+        if func_addr is None:
+            return
+        possible_addrs = state.solver.eval_upto(func_addr, 2)
         if len(possible_addrs) > 1:
             # Create a deferred state to explore later
             tmp_state = state.copy()
@@ -438,8 +587,8 @@ def b_call(state: SimState, context: AnalysisContext) -> None:
             import angr
 
             return angr.SIM_PROCEDURES["stubs"]["ReturnUnconstrained"]().execute(state)
-    except:
-        pass
+    except Exception as e:
+        context.print_debug(f"Function address resolution error: {e}")
 
 
 def b_address_concretization_before(state: SimState, context: AnalysisContext) -> None:

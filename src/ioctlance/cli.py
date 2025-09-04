@@ -42,6 +42,12 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("-o", "--output", type=str, help="Output file for results (JSON format)")
 
     parser.add_argument("-t", "--timeout", type=int, default=120, help="Maximum analysis time in seconds")
+    parser.add_argument(
+        "--ioctl-timeout",
+        type=int,
+        default=None,
+        help="Per-IOCTL hunt timeout; defaults to --timeout if not set",
+    )
 
     parser.add_argument("--ioctl", type=str, help="Specific IOCTL code to test (hex format, e.g., 0x22201c)")
 
@@ -66,6 +72,23 @@ def create_parser() -> argparse.ArgumentParser:
 
     parser.add_argument("--length", type=int, help="Maximum instruction count")
 
+    parser.add_argument(
+        "--profile",
+        choices=["fast", "balanced", "thorough", "paranoid", "memory_safe"],
+        help="Analysis profile (overrides individual timeout/bound/length settings)",
+    )
+
+    # Search strategy controls
+    parser.add_argument(
+        "--search",
+        choices=["dfs", "beam"],
+        default=None,
+        help="Search strategy to explore paths",
+    )
+    parser.add_argument("--beam-width", type=int, default=None, help="Beam width for beam search")
+    parser.add_argument("--triage-steps", type=int, default=None, help="Triage window steps for beam search")
+    parser.add_argument("--triage-beam-width", type=int, default=None, help="Beam width to use during triage window")
+
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
 
     parser.add_argument("--debug", action="store_true", help="Enable debug output")
@@ -77,6 +100,11 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["json", "jsonl", "markdown", "html", "csv", "sarif"],
         default="json",
         help="Output format for results",
+    )
+    parser.add_argument(
+        "--targeted-ioctls",
+        action="store_true",
+        help="Enable per-IOCTL targeted hunts (uses ioctl-timeout per IOCTL)",
     )
 
     parser.add_argument(
@@ -166,24 +194,89 @@ def main(argv: list[str] | None = None) -> int:
             from ioctlance.core.driver_analyzer import DriverAnalyzer
             from ioctlance.output import OutputManager, OutputFormat, OutputLevel
 
-            config_kwargs = {
-                "timeout": args.timeout,
-                "target_ioctl": args.ioctl,
-                "global_var_size": args.global_var_size,
-                "complete_mode": args.complete,
-                "debug": args.debug,
-                "verbose": args.verbose,
-            }
+            # Handle profile-based configuration
+            if args.profile:
+                # Use profile as base configuration
+                config = AnalysisConfig.from_profile(args.profile)
 
-            if args.bound:
-                config_kwargs["bound"] = args.bound
-            if args.length:
-                config_kwargs["length"] = args.length
-            if args.ioctl_handler:
-                config_kwargs["ioctl_handler_addr"] = args.ioctl_handler
+                # Override with any explicitly provided arguments
+                if args.timeout != 120:  # If not default
+                    config.timeout = args.timeout
+                if args.bound:
+                    config.bound = args.bound
+                if args.length:
+                    config.length = args.length
+                if args.ioctl:
+                    config.target_ioctl = args.ioctl
+                if args.ioctl_handler:
+                    config.ioctl_handler_addr = args.ioctl_handler
+                config.global_var_size = args.global_var_size
+                config.complete_mode = args.complete
+                config.debug = args.debug
+                config.verbose = args.verbose
 
-            # Create config and context with all parameters
-            config = AnalysisConfig(**config_kwargs)
+                if args.search is not None:
+                    config.search_strategy = args.search
+                if args.beam_width is not None:
+                    config.beam_width = args.beam_width
+                if args.triage_steps is not None:
+                    config.triage_steps = args.triage_steps
+                if args.triage_beam_width is not None:
+                    config.triage_beam_width = args.triage_beam_width
+                if args.targeted_ioctls:
+                    config.targeted_ioctls = True
+
+                # Timeouts: make ioctl_timeout follow timeout unless explicitly set
+                if args.ioctl_timeout is not None:
+                    config.ioctl_timeout = args.ioctl_timeout
+                else:
+                    config.ioctl_timeout = config.timeout
+
+                if args.verbose:
+                    logger.info(
+                        f"Using profile '{args.profile}' with timeout={config.timeout}s, "
+                        f"max_steps={config.max_steps}, max_states={config.max_states}"
+                    )
+            else:
+                # Original configuration method
+                config_kwargs = {
+                    "timeout": args.timeout,
+                    "target_ioctl": args.ioctl,
+                    "global_var_size": args.global_var_size,
+                    "complete_mode": args.complete,
+                    "debug": args.debug,
+                    "verbose": args.verbose,
+                }
+
+                # Make ioctl_timeout follow timeout unless explicitly set
+                if args.ioctl_timeout is not None:
+                    config_kwargs["ioctl_timeout"] = args.ioctl_timeout
+                else:
+                    config_kwargs["ioctl_timeout"] = args.timeout
+
+                if args.bound:
+                    config_kwargs["bound"] = args.bound
+                if args.length:
+                    config_kwargs["length"] = args.length
+                if args.ioctl_handler:
+                    config_kwargs["ioctl_handler_addr"] = args.ioctl_handler
+
+                # Set search strategy knobs if provided
+                if args.search is not None:
+                    config_kwargs["search_strategy"] = args.search
+                if args.beam_width is not None:
+                    config_kwargs["beam_width"] = args.beam_width
+                if args.triage_steps is not None:
+                    config_kwargs["triage_steps"] = args.triage_steps
+                if args.triage_beam_width is not None:
+                    config_kwargs["triage_beam_width"] = args.triage_beam_width
+                if args.targeted_ioctls:
+                    config_kwargs["targeted_ioctls"] = True
+
+                config = AnalysisConfig(**config_kwargs)
+
+            # Announce effective timeouts for clarity
+            logger.info(f"Using timeouts: timeout={config.timeout}s, ioctl_timeout={config.ioctl_timeout}s")
 
             # Create output manager
             output_format = OutputFormat.JSON if args.json else OutputFormat[args.format.upper()]
@@ -230,7 +323,10 @@ def main(argv: list[str] | None = None) -> int:
             # Create unified result if output manager is available
             if context.output_manager:
                 unified_result = context.output_manager.create_result(
-                    analysis_time=analysis_time, errors=result.error if result.error else []
+                    raw_result=result,  # Pass the raw result to get IOCTL handler info
+                    analysis_time=analysis_time,
+                    binary_metadata=result.binary_metadata,
+                    errors=result.error if result.error else [],
                 )
                 # Store the result with the output manager for formatting
                 all_results.append(

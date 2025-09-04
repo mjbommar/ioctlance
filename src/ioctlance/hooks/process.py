@@ -108,48 +108,6 @@ class HookZwOpenProcess(BaseHook):
         return 0
 
 
-class HookObDereferenceObject(BaseHook):
-    """Hook for ObDereferenceObject - dereferences an object."""
-
-    def run(self, Object) -> None:
-        """Dereference an object."""
-        context = self.get_context()
-
-        # Check for vulnerabilities with our detector
-        if context and hasattr(context, "detectors"):
-            for detector in context.detectors:
-                if detector.enabled and hasattr(detector, "check_obdereference"):
-                    vuln = detector.check_obdereference(self.state, Object)
-                    if vuln:
-                        context.add_vulnerability(vuln)
-
-        if context:
-            context.print_debug(f"ObDereferenceObject: Object={Object}")
-
-        return None
-
-
-class HookObfDereferenceObject(BaseHook):
-    """Hook for ObfDereferenceObject - fast dereference of an object."""
-
-    def run(self, Object) -> None:
-        """Fast dereference an object."""
-        context = self.get_context()
-
-        # Check for vulnerabilities with our detector
-        if context and hasattr(context, "detectors"):
-            for detector in context.detectors:
-                if detector.enabled and hasattr(detector, "check_obdereference"):
-                    vuln = detector.check_obdereference(self.state, Object)
-                    if vuln:
-                        context.add_vulnerability(vuln)
-
-        if context:
-            context.print_debug(f"ObfDereferenceObject: Object={Object}")
-
-        return None
-
-
 class HookPsGetCurrentProcess(BaseHook):
     """Hook for PsGetCurrentProcess - gets current process."""
 
@@ -189,13 +147,7 @@ def register_hooks(project) -> None:
         project: angr project to register hooks with
     """
     # Get calling convention
-    import archinfo
-    from angr.calling_conventions import SimCCMicrosoftAMD64, SimCCStdcall
-
-    if project.arch.name == archinfo.ArchX86.name:
-        cc = SimCCStdcall(project.arch)
-    else:
-        cc = SimCCMicrosoftAMD64(project.arch)
+    cc = BaseHook.get_calling_convention(project)
 
     hooks = {
         "PsGetVersion": HookPsGetVersion,
@@ -203,8 +155,6 @@ def register_hooks(project) -> None:
         "ZwTerminateProcess": HookZwTerminateProcess,
         "PsLookupProcessByProcessId": HookPsLookupProcessByProcessId,
         "ZwOpenProcess": HookZwOpenProcess,
-        "ObDereferenceObject": HookObDereferenceObject,
-        "ObfDereferenceObject": HookObfDereferenceObject,
         "PsGetCurrentProcess": HookPsGetCurrentProcess,
         "PsGetCurrentThread": HookPsGetCurrentThread,
     }
@@ -223,8 +173,6 @@ __all__ = [
     "HookZwTerminateProcess",
     "HookPsLookupProcessByProcessId",
     "HookZwOpenProcess",
-    "HookObDereferenceObject",
-    "HookObfDereferenceObject",
     "HookPsGetCurrentProcess",
     "HookPsGetCurrentThread",
 ]

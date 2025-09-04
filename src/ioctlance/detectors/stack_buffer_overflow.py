@@ -7,6 +7,7 @@ from angr import SimState
 
 from ..core.analysis_context import AnalysisContext
 from .base import VulnerabilityDetector, detector_registry
+from ..utils.error_handler import SymbolicExecutionErrorHandler
 
 logger = logging.getLogger(__name__)
 
@@ -78,15 +79,8 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
 
         try:
             # Get concrete values for comparison
-            if hasattr(address, "concrete"):
-                addr_concrete = state.solver.eval_one(address)
-            else:
-                addr_concrete = address
-
-            if hasattr(stack_pointer, "concrete"):
-                sp_concrete = state.solver.eval_one(stack_pointer)
-            else:
-                sp_concrete = stack_pointer
+            addr_concrete = SymbolicExecutionErrorHandler.safe_eval(state, address, default=0)
+            sp_concrete = SymbolicExecutionErrorHandler.safe_eval(state, stack_pointer, default=0)
 
             # Check if address is in stack range (typically stack grows down)
             # Stack usually spans from sp to sp + some reasonable range (e.g., 64KB)
@@ -106,7 +100,8 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
                 return vuln
 
         except Exception as e:
-            logger.debug(f"Error checking stack overflow: {e}")
+            if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                logger.debug(f"Error checking stack overflow: {e}")
 
         return None
 
@@ -149,8 +144,8 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         # If we're writing a large, potentially symbolic amount to the stack, flag it
         if size is not None and (
             (isinstance(size, int) and size > 256)  # Large concrete write
-            or (hasattr(size, "symbolic") and size.symbolic)  # Symbolic size
-            or (hasattr(value, "symbolic") and value.symbolic and size > 32)  # Tainted data > typical buffer
+            or SymbolicExecutionErrorHandler.safe_symbolic_check(size)  # Symbolic size
+            or (SymbolicExecutionErrorHandler.safe_symbolic_check(value) and size > 32)  # Tainted data > typical buffer
         ):
             # This is a potential overflow - writing user-controlled or large data to stack
             return self.create_vulnerability_info(
@@ -160,7 +155,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
                 parameters={
                     "write_address": hex(address),
                     "write_size": str(size),
-                    "tainted": str(hasattr(value, "symbolic") and value.symbolic),
+                    "tainted": str(SymbolicExecutionErrorHandler.safe_symbolic_check(value)),
                 },
                 others={"severity": "HIGH", "exploitation": "Potential stack corruption"},
             )
@@ -168,27 +163,30 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         # Check 1: Return address overwrite
         # Return address is typically at [rbp + 8] on x64 or [ebp + 4] on x86
         frame_pointer = state.regs.rbp if hasattr(state.regs, "rbp") else state.regs.ebp
-        if hasattr(frame_pointer, "concrete"):
-            fp_concrete = state.solver.eval_one(frame_pointer)
-        else:
-            fp_concrete = frame_pointer
+        fp_concrete = SymbolicExecutionErrorHandler.safe_eval(state, frame_pointer, default=0)
 
         ret_addr_offset = 8 if state.arch.bits == 64 else 4
         ret_addr_location = fp_concrete + ret_addr_offset
 
         # Check if write overlaps with return address
-        if address <= ret_addr_location < (address + size):
-            return self.create_vulnerability_info(
-                title="Stack Buffer Overflow - Return Address Overwrite",
-                description="Write operation can overwrite function return address",
-                state=state,
-                parameters={
-                    "write_address": hex(address),
-                    "write_size": size,
-                    "return_address_location": hex(ret_addr_location),
-                },
-                others={"severity": "CRITICAL", "exploitation": "ROP/Code execution possible"},
-            )
+        # Need to handle symbolic size
+        try:
+            concrete_size = state.solver.eval(size) if hasattr(size, "concrete") else size
+            if address <= ret_addr_location < (address + concrete_size):
+                return self.create_vulnerability_info(
+                    title="Stack Buffer Overflow - Return Address Overwrite",
+                    description="Write operation can overwrite function return address",
+                    state=state,
+                    parameters={
+                        "write_address": hex(address),
+                        "write_size": concrete_size,
+                        "return_address_location": hex(ret_addr_location),
+                    },
+                    others={"severity": "CRITICAL", "exploitation": "ROP/Code execution possible"},
+                )
+        except:
+            # If we can't evaluate size, skip this check
+            pass
 
         # Check 2: Stack canary corruption
         if self._check_canary_corruption(state, address, size):
@@ -211,18 +209,24 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
             )
 
         # Check 4: Large stack write with tainted data
-        if size > 256 and self._is_tainted_write(value):
-            return self.create_vulnerability_info(
-                title="Stack Buffer Overflow - Large Tainted Write",
-                description=f"Large tainted write to stack ({size} bytes)",
-                state=state,
-                parameters={
-                    "write_address": hex(address),
-                    "write_size": size,
-                    "value": str(value)[:100],  # Truncate for readability
-                },
-                others={"severity": "MEDIUM", "exploitation": "Potential stack corruption"},
-            )
+        # Check if size is concrete and large
+        try:
+            concrete_size = state.solver.eval(size) if hasattr(size, "concrete") else size
+            if concrete_size > 256 and self._is_tainted_write(value):
+                return self.create_vulnerability_info(
+                    title="Stack Buffer Overflow - Large Tainted Write",
+                    description=f"Large tainted write to stack ({concrete_size} bytes)",
+                    state=state,
+                    parameters={
+                        "write_address": hex(address),
+                        "write_size": concrete_size,
+                        "value": str(value)[:100],  # Truncate for readability
+                    },
+                    others={"severity": "MEDIUM", "exploitation": "Potential stack corruption"},
+                )
+        except:
+            # If we can't evaluate size, skip this check
+            pass
 
         return None
 
@@ -244,8 +248,13 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         if frame_id in self.stack_canaries:
             canary_addr = self.stack_canaries[frame_id]
             # Check if write overlaps with canary
-            if address <= canary_addr < (address + size):
-                return True
+            try:
+                concrete_size = state.solver.eval(size) if hasattr(size, "concrete") else size
+                if address <= canary_addr < (address + concrete_size):
+                    return True
+            except:
+                # Can't evaluate size, assume no overlap
+                pass
 
         # Heuristic: Check for common canary patterns
         # Canaries often end in 00 (null terminator) on x64
@@ -277,11 +286,7 @@ class StackBufferOverflowDetector(VulnerabilityDetector):
         Returns:
             True if value is tainted
         """
-        if hasattr(value, "symbolic"):
-            return value.symbolic
-        elif hasattr(value, "variables"):
-            return len(value.variables) > 0
-        return False
+        return SymbolicExecutionErrorHandler.safe_symbolic_check(value)
 
     def setup_canary(self, state: SimState, address: int) -> None:
         """Set up a stack canary at the given address.

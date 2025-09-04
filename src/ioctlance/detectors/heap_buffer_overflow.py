@@ -327,16 +327,6 @@ class HeapBufferOverflowDetector(VulnerabilityDetector):
             },
         )
 
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get current IOCTL code."""
-        if hasattr(self.context, "io_control_code"):
-            try:
-                ioctl = state.solver.eval_one(self.context.io_control_code)
-                return hex(ioctl)
-            except:
-                pass
-        return "0x0"
-
 
 # Register the detector
 detector_registry.register(HeapBufferOverflowDetector)

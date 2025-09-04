@@ -191,7 +191,7 @@ class InformationDisclosureDetector(VulnerabilityDetector):
         address = kwargs.get("address")
         data = kwargs.get("data")
 
-        if address is None or not data:
+        if address is None or data is None:
             return None
 
         # Check if writing to user buffer
@@ -467,25 +467,6 @@ class InformationDisclosureDetector(VulnerabilityDetector):
             # If we can't evaluate, check symbolically
             size_str = str(size)
             return "InputBufferLength" in size_str or "OutputBufferLength" in size_str
-
-    def _get_ioctl_code(self, state: SimState) -> str:
-        """Get current IOCTL code from state.
-
-        Args:
-            state: Current simulation state
-
-        Returns:
-            IOCTL code as hex string
-        """
-        globals_dict = get_state_globals(state)
-        if "IoControlCode" in globals_dict:
-            return safe_hex(globals_dict["IoControlCode"])
-        elif self.context and self.context.io_control_code:
-            try:
-                return safe_hex(state.solver.eval(self.context.io_control_code))
-            except:
-                pass
-        return "0x0"
 
     def get_statistics(self) -> dict[str, Any]:
         """Get detector statistics.

@@ -110,6 +110,90 @@ class HookSwprintf(BaseHook):
         return claripy.BVS("swprintf_ret", 32)
 
 
+class HookDbgPrint(BaseHook):
+    """Hook for DbgPrint to detect format string vulnerabilities."""
+
+    def run(self, format_str, *args):
+        context = self.get_context()
+        if context:
+            for detector in context.detectors:
+                if hasattr(detector, "check_state"):
+                    result = detector.check_state(
+                        self.state,
+                        "call",
+                        func_name="DbgPrint",
+                        format_str=format_str,
+                        args=args,
+                    )
+                    if result:
+                        context.add_vulnerability(result)
+        return 0
+
+
+class HookDbgPrintEx(BaseHook):
+    """Hook for DbgPrintEx to detect format string vulnerabilities."""
+
+    def run(self, component_id, level, format_str, *args):
+        context = self.get_context()
+        if context:
+            for detector in context.detectors:
+                if hasattr(detector, "check_state"):
+                    result = detector.check_state(
+                        self.state,
+                        "call",
+                        func_name="DbgPrintEx",
+                        component_id=component_id,
+                        level=level,
+                        format_str=format_str,
+                        args=args,
+                    )
+                    if result:
+                        context.add_vulnerability(result)
+        return 0
+
+
+class HookKdPrint(BaseHook):
+    """Hook for KdPrint to detect format string vulnerabilities (alias of DbgPrint)."""
+
+    def run(self, format_str, *args):
+        context = self.get_context()
+        if context:
+            for detector in context.detectors:
+                if hasattr(detector, "check_state"):
+                    result = detector.check_state(
+                        self.state,
+                        "call",
+                        func_name="KdPrint",
+                        format_str=format_str,
+                        args=args,
+                    )
+                    if result:
+                        context.add_vulnerability(result)
+        return 0
+
+
+class HookKdPrintEx(BaseHook):
+    """Hook for KdPrintEx to detect format string vulnerabilities (alias of DbgPrintEx)."""
+
+    def run(self, component_id, level, format_str, *args):
+        context = self.get_context()
+        if context:
+            for detector in context.detectors:
+                if hasattr(detector, "check_state"):
+                    result = detector.check_state(
+                        self.state,
+                        "call",
+                        func_name="KdPrintEx",
+                        component_id=component_id,
+                        level=level,
+                        format_str=format_str,
+                        args=args,
+                    )
+                    if result:
+                        context.add_vulnerability(result)
+        return 0
+
+
 class HookRtlStringCbPrintfW(BaseHook):
     """Hook for RtlStringCbPrintfW to detect format string vulnerabilities."""
 
@@ -136,6 +220,26 @@ class HookRtlStringCbPrintfW(BaseHook):
         return 0
 
 
+class HookPrintf(BaseHook):
+    """Hook for printf to detect format string vulnerabilities."""
+
+    def run(self, format_str, *args):
+        context = self.get_context()
+        if context:
+            for detector in context.detectors:
+                if hasattr(detector, "check_state"):
+                    result = detector.check_state(
+                        self.state,
+                        "call",
+                        func_name="printf",
+                        format_str=format_str,
+                        args=args,
+                    )
+                    if result:
+                        context.add_vulnerability(result)
+        return 0
+
+
 def register_hooks(project) -> None:
     """Register hooks with the project.
 
@@ -143,19 +247,18 @@ def register_hooks(project) -> None:
         project: angr project to register hooks with
     """
     # Get calling convention
-    import archinfo
-    from angr.calling_conventions import SimCCMicrosoftAMD64, SimCCStdcall
-
-    if project.arch.name == archinfo.ArchX86.name:
-        cc = SimCCStdcall(project.arch)
-    else:
-        cc = SimCCMicrosoftAMD64(project.arch)
+    cc = BaseHook.get_calling_convention(project)
 
     hooks = {
         "RtlGetVersion": HookRtlGetVersion,
         "RtlInitUnicodeString": HookRtlInitUnicodeString,
         "RtlIsNtDdiVersionAvailable": HookRtlIsNtDdiVersionAvailable,
         # Format string functions
+        "DbgPrint": HookDbgPrint,
+        "DbgPrintEx": HookDbgPrintEx,
+        "KdPrint": HookKdPrint,
+        "KdPrintEx": HookKdPrintEx,
+        "printf": HookPrintf,
         "sprintf": HookSprintf,
         "swprintf": HookSwprintf,
         "snprintf": HookSprintf,  # Same signature as sprintf
@@ -178,6 +281,11 @@ __all__ = [
     "HookRtlGetVersion",
     "HookRtlInitUnicodeString",
     "HookRtlIsNtDdiVersionAvailable",
+    "HookPrintf",
+    "HookDbgPrint",
+    "HookDbgPrintEx",
+    "HookKdPrint",
+    "HookKdPrintEx",
     "HookSprintf",
     "HookSwprintf",
     "HookRtlStringCbPrintfW",

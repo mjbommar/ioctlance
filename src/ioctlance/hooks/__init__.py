@@ -31,6 +31,7 @@ def register_all_hooks(project) -> None:
         file_operations,
         io_manager,
         kernel,
+        wdf,
         memcpy,
         memory,
         native_api,
@@ -38,6 +39,7 @@ def register_all_hooks(project) -> None:
         process,
         registry,
         runtime,
+        atomic,
         utility,
     )
 
@@ -46,12 +48,14 @@ def register_all_hooks(project) -> None:
         memcpy,
         memory,
         kernel,
+        wdf,
         registry,
         process,
         object_manager,
         executive,
         native_api,
         runtime,
+        atomic,
         utility,
         file_operations,
     ]
@@ -82,6 +86,7 @@ def get_hook_by_name(name: str):
         process,
         registry,
         runtime,
+        atomic,
         utility,
     )
 
@@ -96,6 +101,7 @@ def get_hook_by_name(name: str):
         executive,
         native_api,
         runtime,
+        atomic,
         utility,
         file_operations,
     ]

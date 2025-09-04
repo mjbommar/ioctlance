@@ -1,5 +1,6 @@
 """Base vulnerability detector interface for IOCTLance."""
 
+import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -7,6 +8,9 @@ from angr import SimState
 
 from ..core.analysis_context import AnalysisContext
 from ..utils.state_capture import capture_raw_state
+from ..utils.error_handler import SymbolicExecutionErrorHandler
+
+logger = logging.getLogger(__name__)
 
 
 class VulnerabilityDetector(ABC):
@@ -103,8 +107,11 @@ class VulnerabilityDetector(ABC):
             try:
                 ioctl = state.solver.eval_one(self.context.io_control_code)
                 eval_params["IoControlCode"] = hex(ioctl)
-            except:
-                eval_params["IoControlCode"] = str(self.context.io_control_code)
+            except Exception as e:
+                if not SymbolicExecutionErrorHandler.handle_claripy_error(e, "IoControlCode evaluation"):
+                    logger.debug(f"Failed to evaluate IoControlCode: {e}")
+                # Use the _get_ioctl_code method which handles symbolic values properly
+                eval_params["IoControlCode"] = self._get_ioctl_code(state)
 
         # Add buffer values
         for name, buf in [
@@ -118,16 +125,27 @@ class VulnerabilityDetector(ABC):
                 try:
                     val = state.solver.eval_one(buf)
                     eval_params[name] = hex(val) if isinstance(val, int) else str(val)
-                except:
-                    eval_params[name] = str(buf)
+                except Exception as e:
+                    if not SymbolicExecutionErrorHandler.handle_claripy_error(e, f"{name} evaluation"):
+                        logger.debug(f"Failed to evaluate {name}: {e}")
+                    # For symbolic values, try to get possible values or use placeholder
+                    try:
+                        possible_values = state.solver.eval_upto(buf, 10)
+                        if possible_values:
+                            val = possible_values[0]
+                            eval_params[name] = hex(val) if isinstance(val, int) else str(val)
+                        else:
+                            eval_params[name] = "0x0"  # Default placeholder
+                    except Exception:
+                        eval_params[name] = "0x0"  # Default placeholder
 
         # Capture raw state data for enhanced analysis
         raw_data = None
         try:
             raw_data = capture_raw_state(state, self.context)
-        except Exception:
+        except Exception as e:
             # Don't fail vulnerability recording if raw capture fails
-            pass
+            logger.debug(f"Failed to capture raw state data: {e}")
 
         # Compute severity from title if not provided in others
         severity = (others or {}).get("severity")
@@ -145,7 +163,9 @@ class VulnerabilityDetector(ABC):
             try:
                 if hasattr(state, "addr"):
                     state_str = f"<SimState @ {hex(state.addr)}>"
-            except:
+            except Exception as e:
+                if not SymbolicExecutionErrorHandler.is_non_fatal_error(e):
+                    logger.debug(f"Error getting state address: {e}")
                 pass
 
         vulnerability_info = {
@@ -162,6 +182,105 @@ class VulnerabilityDetector(ABC):
         }
 
         return vulnerability_info
+
+    def _get_ioctl_code(self, state: SimState) -> str:
+        """Get IOCTL code from state if available.
+
+        Args:
+            state: Current simulation state
+
+        Returns:
+            IOCTL code as hex string or '0x0'
+        """
+        from ..utils.helpers import safe_hex, get_state_globals
+
+        # First try the context's io_control_code
+        if self.context.io_control_code is not None:
+            try:
+                # Try to evaluate to a concrete value
+                concrete_value = state.solver.eval_one(self.context.io_control_code)
+                return hex(concrete_value) if isinstance(concrete_value, int) else safe_hex(concrete_value)
+            except Exception:
+                # If it's symbolic and can't be evaluated, try to get possible values
+                try:
+                    possible_values = state.solver.eval_upto(self.context.io_control_code, 10)
+                    if possible_values:
+                        # Use the first possible value
+                        return (
+                            hex(possible_values[0])
+                            if isinstance(possible_values[0], int)
+                            else safe_hex(possible_values[0])
+                        )
+                except Exception:
+                    pass  # Fall through to other methods
+
+        # Then check globals
+        globals_dict = get_state_globals(state)
+        if "IoControlCode" in globals_dict:
+            ioctl_code_value = globals_dict["IoControlCode"]
+            # If it's a symbolic value, evaluate it first
+            if hasattr(ioctl_code_value, "symbolic"):
+                try:
+                    concrete_value = state.solver.eval(ioctl_code_value)
+                    return hex(concrete_value) if isinstance(concrete_value, int) else safe_hex(concrete_value)
+                except Exception:
+                    # If evaluation fails, try to get possible values
+                    try:
+                        possible_values = state.solver.eval_upto(ioctl_code_value, 10)
+                        if possible_values:
+                            return (
+                                hex(possible_values[0])
+                                if isinstance(possible_values[0], int)
+                                else safe_hex(possible_values[0])
+                            )
+                    except Exception:
+                        pass  # Fall through to default
+                    return "0x0"
+            else:
+                return safe_hex(ioctl_code_value)
+        elif self.context and self.context.io_control_code is not None:
+            try:
+                return safe_hex(state.solver.eval(self.context.io_control_code))
+            except Exception as e:
+                if not SymbolicExecutionErrorHandler.handle_claripy_error(e, "IOCTL code evaluation"):
+                    logger.debug(f"Failed to evaluate IOCTL code: {e}")
+                pass
+        return "0x0"
+
+    def _is_tainted(self, value: Any) -> bool:
+        """Check if value is tainted (user-controlled).
+
+        Args:
+            value: Value to check
+
+        Returns:
+            True if value is tainted
+        """
+        # Check if the value comes from user input
+        if value is None:
+            return False
+
+        # Check if value contains references to user buffers
+        value_str = str(value)
+        user_sources = ["SystemBuffer", "Type3InputBuffer", "UserBuffer", "input_buffer", "user_buffer", "InputBuffer"]
+
+        for source in user_sources:
+            if source in value_str:
+                return True
+
+        # Check if it's a symbolic value derived from IOCTL input
+        if SymbolicExecutionErrorHandler.safe_symbolic_check(value):
+            # Check if any of its variables are from user input
+            if hasattr(value, "variables"):
+                for var in value.variables:
+                    var_str = str(var)
+                    for source in user_sources:
+                        if source in var_str:
+                            return True
+            # Fallback: treat symbolic values as tainted to avoid truthiness misses
+            return True
+
+        return False
 
 
 class DetectorRegistry:

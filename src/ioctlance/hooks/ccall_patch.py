@@ -15,10 +15,10 @@ def patch_angr_ccall():
     """Apply runtime patch to angr's ccall module to handle invalid cc_op values."""
     try:
         import angr.engines.vex.claripy.ccall as ccall
-        
+
         # Save original function
         original_pc_calculate_rdata_all_WRK = ccall.pc_calculate_rdata_all_WRK
-        
+
         def patched_pc_calculate_rdata_all_WRK(state, cc_op, cc_dep1, cc_dep2, cc_ndep, platform="AMD64"):
             """Patched version that handles invalid cc_op values."""
             try:
@@ -30,6 +30,7 @@ def patch_angr_ccall():
                     logger.debug(f"Invalid cc_op {e.args[0]} encountered, returning symbolic value")
                     # Return a symbolic value instead of crashing
                     import claripy
+
                     return state.solver.BVS("invalid_cc_rdata", 64)
                 else:
                     # Re-raise if it's a different KeyError
@@ -37,12 +38,12 @@ def patch_angr_ccall():
             except Exception:
                 # Let other exceptions bubble up
                 raise
-        
+
         # Apply the patch
         ccall.pc_calculate_rdata_all_WRK = patched_pc_calculate_rdata_all_WRK
         logger.debug("Successfully patched angr ccall module")
         return True
-        
+
     except ImportError:
         logger.warning("Could not import angr.engines.vex.claripy.ccall for patching")
         return False

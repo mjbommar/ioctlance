@@ -7,19 +7,17 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import aiofiles
 from fastapi import (
     BackgroundTasks,
     FastAPI,
-    File,
     HTTPException,
     Query,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
-    status,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -35,6 +33,7 @@ from ..__version__ import __version__
 class AnalysisRequest(BaseModel):
     """Request model for driver analysis."""
 
+    profile: str | None = Field(None, description="Analysis profile (fast/balanced/thorough/paranoid/memory_safe)")
     timeout: int = Field(default=120, ge=1, le=3600, description="Analysis timeout in seconds")
     ioctl_code: str | None = Field(None, description="Specific IOCTL code to test (hex format)")
     complete_mode: bool = Field(False, description="Enable complete mode analysis")
@@ -172,14 +171,40 @@ async def run_analysis(job_id: str, driver_path: Path, config: AnalysisRequest) 
         )
 
         # Create analysis configuration
-        analysis_config = AnalysisConfig(
-            timeout=config.timeout,
-            target_ioctl=config.ioctl_code,
-            global_var_size=config.global_var_size,
-            complete_mode=config.complete_mode,
-            bound=config.bound,
-            length=config.length,
-        )
+        if config.profile:
+            # Use profile-based configuration
+            try:
+                analysis_config = AnalysisConfig.from_profile(config.profile)
+            except ValueError as e:
+                # Invalid profile name
+                job.status = "failed"
+                job.error = str(e)
+                job.completed_at = datetime.now()
+                await notify_websocket_clients(job_id, {"event": "failed", "job_id": job_id, "error": str(e)})
+                return
+
+            # Override with explicit settings if provided
+            if config.timeout != 120:  # Not default
+                analysis_config.timeout = config.timeout
+            if config.ioctl_code:
+                analysis_config.target_ioctl = config.ioctl_code
+            if config.global_var_size:
+                analysis_config.global_var_size = config.global_var_size
+            analysis_config.complete_mode = config.complete_mode
+            if config.bound is not None:
+                analysis_config.bound = config.bound
+            if config.length is not None:
+                analysis_config.length = config.length
+        else:
+            # Original configuration method
+            analysis_config = AnalysisConfig(
+                timeout=config.timeout,
+                target_ioctl=config.ioctl_code,
+                global_var_size=config.global_var_size,
+                complete_mode=config.complete_mode,
+                bound=config.bound,
+                length=config.length,
+            )
 
         # Create context and analyzer
         context = AnalysisContext.create_for_driver(driver_path, analysis_config)
@@ -251,7 +276,7 @@ async def health_check():
 
 
 @app.post("/upload", tags=["Analysis"])
-async def upload_driver(file: UploadFile = File(..., description="Windows driver file (.sys)")):
+async def upload_driver(file: UploadFile):
     """Upload a driver file for analysis."""
     # Validate file extension
     if not file.filename.endswith(".sys"):
@@ -280,10 +305,11 @@ async def upload_driver(file: UploadFile = File(..., description="Windows driver
 
 
 @app.post("/analyze/{file_hash}", response_model=AnalysisStatus, tags=["Analysis"])
-async def analyze_driver(
-    file_hash: str, background_tasks: BackgroundTasks, request: AnalysisRequest = AnalysisRequest()
-):
+async def analyze_driver(file_hash: str, background_tasks: BackgroundTasks, request: AnalysisRequest | None = None):
     """Start analysis of an uploaded driver."""
+    if request is None:
+        request = AnalysisRequest()
+
     # Check if file exists
     if file_hash not in uploaded_files:
         raise HTTPException(status_code=404, detail="File not found. Please upload first.")
