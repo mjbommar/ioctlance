@@ -18,8 +18,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Analyze all drivers in a directory
-  ioctlance-batch /path/to/drivers -o results.json
+  # Analyze all drivers in a directory (streams JSONL by default)
+  ioctlance-batch /path/to/drivers -o results.jsonl
 
   # Use memory-safe mode for large archives
   ioctlance-batch /nas4/data/drivers -o results.jsonl --mode safe --batch-size 50
@@ -38,11 +38,11 @@ Examples:
         "-o",
         "--output",
         type=Path,
-        default="batch_results.json",
-        help="Output file for results (default: batch_results.json)",
+        default="batch_results.jsonl",
+        help="Output file for results (default: batch_results.jsonl)",
     )
 
-    parser.add_argument("--format", choices=["json", "jsonl"], default="json", help="Output format (default: json)")
+    parser.add_argument("--format", choices=["json", "jsonl"], default="jsonl", help="Output format (default: jsonl)")
 
     parser.add_argument("-t", "--timeout", type=int, default=120, help="Timeout per driver in seconds (default: 120)")
 
@@ -50,26 +50,36 @@ Examples:
         "--mode",
         choices=["parallel", "safe", "sequential"],
         default="parallel",
-        help="Processing mode (default: parallel)",
+        help="Processing mode (default: parallel). 'safe' maps to 'parallel' in the new engine.",
     )
 
     parser.add_argument(
         "-w", "--workers", type=int, default=None, help="Number of parallel workers (default: CPU count)"
     )
 
-    parser.add_argument("--batch-size", type=int, default=100, help="Batch size for safe mode (default: 100)")
-
-    parser.add_argument(
-        "--memory-threshold", type=float, default=80.0, help="Memory threshold in GB for safe mode (default: 80)"
-    )
-
-    parser.add_argument(
-        "--memory-percent", type=int, default=85, help="Memory percent threshold for safe mode (default: 85)"
-    )
+    # Legacy options (ignored in redesigned engine; kept for compatibility)
+    parser.add_argument("--batch-size", type=int, default=100, help=argparse.SUPPRESS)
+    parser.add_argument("--memory-threshold", type=float, default=80.0, help=argparse.SUPPRESS)
+    parser.add_argument("--memory-percent", type=int, default=85, help=argparse.SUPPRESS)
 
     parser.add_argument("--no-recursive", action="store_true", help="Don't recursively search subdirectories")
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output")
+
+    # Search strategy controls
+    parser.add_argument(
+        "--search",
+        choices=["dfs", "beam"],
+        default="beam",
+        help="Path exploration strategy (default: beam)",
+    )
+    parser.add_argument(
+        "--beam-width", type=int, default=64, help="Beam width when --search beam is used (default: 64)"
+    )
+    parser.add_argument("--triage-steps", type=int, default=3000, help="Beam triage window steps (default: 3000)")
+    parser.add_argument(
+        "--triage-beam-width", type=int, default=24, help="Beam width during triage window (default: 24)"
+    )
 
     parser.add_argument(
         "--profile",
@@ -81,7 +91,9 @@ Examples:
     parser.add_argument("--resume", type=Path, help="Resume from previous results file")
 
     parser.add_argument(
-        "--filter-vulns", action="store_true", help="Only include drivers with vulnerabilities in output"
+        "--filter-vulns",
+        action="store_true",
+        help="Only include drivers with vulnerabilities in output (applies to JSON and JSONL)",
     )
 
     parser.add_argument("--no-progress", action="store_true", help="Disable progress display")
@@ -113,21 +125,25 @@ Examples:
                 console.print(f"[yellow]Unknown profile '{args.profile}', using default timeout[/yellow]")
 
     # Create batch configuration
+    # Map legacy 'safe' mode to parallel
+    mode = args.mode if args.mode != "safe" else "parallel"
+
     config = BatchConfig(
         output_path=args.output,
         output_format=OutputFormat(args.format),
         timeout_per_driver=timeout,
-        processing_mode=ProcessingMode(args.mode),
+        processing_mode=ProcessingMode(mode),
         num_workers=args.workers,
-        batch_size=args.batch_size,
-        memory_threshold_gb=args.memory_threshold,
-        memory_percent_threshold=args.memory_percent,
         recursive_search=not args.no_recursive,
         filter_vulnerable=args.filter_vulns,
         resume_from=args.resume,
         verbose=args.verbose,
         show_progress=not args.no_progress,
         analysis_profile=args.profile,  # Pass profile to config
+        search_strategy=args.search,
+        beam_width=args.beam_width,
+        triage_steps=args.triage_steps,
+        triage_beam_width=args.triage_beam_width,
     )
 
     # Run analyzer (console already created above)

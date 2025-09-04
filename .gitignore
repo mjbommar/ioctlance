@@ -47,6 +47,9 @@ test.json
 *.json.bak
 benchmark_results/
 debug_*.sh
+*.jsonl
+batch_results*.json
+*_results.jsonl
 
 # Local-only artifacts and embedded repos
 reference/angr/

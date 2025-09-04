@@ -1,268 +1,215 @@
-"""Core batch analyzer for processing multiple drivers."""
+"""Redesigned batch analyzer orchestrating traversal, processing, and streaming output."""
+
+from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 from pathlib import Path
-from rich.console import Console
-from rich.panel import Panel
+from typing import Iterable
 
-from .models import BatchConfig, BatchResult, DriverResult, AnalysisStats, ProcessingMode, OutputFormat
-from .processor import ProcessingStrategy, SequentialProcessor, ParallelProcessor, SafeProcessor
-from .progress import ProgressTracker, ConsoleProgressTracker, SilentProgressTracker
+from rich.console import Console
+
+from .models import BatchConfig, BatchResult, DriverResult, AnalysisStats, ProcessingMode
+from .progress import ConsoleProgressTracker, ProgressTracker
+from .processor import parallel_process, sequential_process
+from .stream import JSONLStreamer
+from ..output.formats import OutputFormat
 
 logger = logging.getLogger(__name__)
 
 
 class BatchAnalyzer:
-    """Main batch analyzer for processing multiple Windows drivers."""
+    """Batch analyzer for processing directories of drivers in parallel with streaming output."""
 
     def __init__(self, config: BatchConfig, console: Console | None = None):
-        """Initialize batch analyzer.
-
-        Args:
-            config: Batch analysis configuration
-            console: Optional Rich console for output
-        """
         self.config = config
         self.console = console or Console()
-        self.progress_tracker = self._create_progress_tracker()
-        self.processor = self._create_processor()
+        self.progress: ProgressTracker = (
+            ConsoleProgressTracker(self.console)
+            if config.show_progress
+            else ConsoleProgressTracker(Console(record=True))
+        )
 
-        # Track results
+        # State
         self.results: list[DriverResult] = []
         self.vulnerable_drivers: list[tuple[str, int]] = []
         self.failed_drivers: list[tuple[str, str]] = []
         self.clean_drivers: list[str] = []
+        self._seen: set[str] = set()
 
         # Resume support
-        self.analyzed_drivers: set[str] = set()
-        self._load_previous_results()
+        self._load_resume_set()
 
-    def _create_progress_tracker(self) -> ProgressTracker:
-        """Create appropriate progress tracker based on config."""
-        if self.config.show_progress:
-            return ConsoleProgressTracker(self.console)
-        else:
-            return SilentProgressTracker()
+    def _load_resume_set(self) -> None:
+        src = self.config.resume_from
+        if not src or not Path(src).exists():
+            return
+        try:
+            if str(src).endswith(".jsonl"):
+                with open(src, "r", encoding="utf-8") as f:
+                    for line in f:
+                        try:
+                            rec = json.loads(line)
+                        except Exception:
+                            continue
+                        # Accept both legacy and summary shapes
+                        if isinstance(rec, dict):
+                            if rec.get("type") == "summary" and "driver" in rec:
+                                self._seen.add(rec["driver"])
+                            elif "driver_path" in rec:
+                                self._seen.add(rec["driver_path"])
+                            elif "driver" in rec:
+                                self._seen.add(rec["driver"])
+            else:
+                with open(src, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and "results" in data:
+                    for r in data["results"]:
+                        d = r.get("driver") or r.get("driver_path")
+                        if d:
+                            self._seen.add(d)
+        except Exception as e:
+            logger.warning(f"Failed to load resume data from {src}: {e}")
 
-    def _create_processor(self) -> ProcessingStrategy:
-        """Create processing strategy based on config."""
-        strategy_map = {
-            ProcessingMode.SEQUENTIAL: SequentialProcessor,
-            ProcessingMode.PARALLEL: ParallelProcessor,
-            ProcessingMode.SAFE: SafeProcessor,
-        }
+        if self._seen:
+            self.console.print(f"[yellow]↻[/yellow] Resuming: {len(self._seen)} drivers already analyzed")
 
-        processor_class = strategy_map.get(self.config.processing_mode, ParallelProcessor)
+    def _find_drivers(self, path: Path) -> list[Path]:
+        if path.is_file():
+            return [path] if path.suffix.lower() == ".sys" else []
+        return list(path.rglob("*.sys")) if self.config.recursive_search else list(path.glob("*.sys"))
 
-        return processor_class(self.config, self.progress_tracker)
+    def analyze_path(self, path: Path) -> BatchResult:
+        self.console.print("[cyan]🔍 Scanning for driver files...[/cyan]")
+        drivers = self._find_drivers(path)
+        if not drivers:
+            self.console.print("[red]No .sys files found[/red]")
+            return BatchResult(stats=AnalysisStats(), results=[], config=self.config)
 
-    def _load_previous_results(self) -> None:
-        """Load previous results if resuming."""
-        if self.config.resume_from and self.config.resume_from.exists():
+        # Filter by resume set
+        if self._seen:
+            drivers = [d for d in drivers if str(d) not in self._seen]
+        if not drivers:
+            self.console.print("[green]All drivers already analyzed[/green]")
+            return BatchResult(stats=AnalysisStats(total_drivers=0), results=[], config=self.config)
+
+        self.console.print(
+            f"[green]✓[/green] Found [bold]{len(drivers)}[/bold] driver(s) to analyze (mode: {self.config.processing_mode.value})"
+        )
+
+        # Start streaming if JSONL
+        streamer = JSONLStreamer(self.config) if self.config.output_format == OutputFormat.JSONL else None
+        if streamer:
+            # Announce destination early and record batch start
             try:
-                with open(self.config.resume_from) as f:
-                    if self.config.resume_from.suffix == ".jsonl":
-                        # Load JSONL format
-                        for line in f:
-                            data = json.loads(line)
-                            if "driver_path" in data:
-                                result = DriverResult(**data)
-                                self.results.append(result)
-                                self.analyzed_drivers.add(str(result.driver_path))
-                                self._update_stats_from_result(result)
-                    else:
-                        # Load JSON format
-                        data = json.load(f)
-                        if isinstance(data, dict) and "results" in data:
-                            for res_data in data["results"]:
-                                result = DriverResult(**res_data)
-                                self.results.append(result)
-                                self.analyzed_drivers.add(str(result.driver_path))
-                                self._update_stats_from_result(result)
-
-                if self.analyzed_drivers:
-                    self.console.print(
-                        f"[yellow]↻[/yellow] Resuming: {len(self.analyzed_drivers)} drivers already analyzed"
-                    )
+                self.console.print(f"[blue]Streaming JSONL to[/blue] {self.config.output_path}")
+                streamer.write_event(
+                    "batch_start",
+                    path=str(self.config.output_path),
+                    total=len(drivers),
+                    search=self.config.search_strategy,
+                    beam_width=self.config.beam_width,
+                )
             except Exception as e:
-                logger.warning(f"Failed to load previous results: {e}")
+                logger.warning(f"Failed to write batch_start record: {e}")
 
-    def _update_stats_from_result(self, result: DriverResult) -> None:
-        """Update internal statistics from a result."""
+        # Start processing
+        start = time.time()
+        self.progress.start(len(drivers), "Analyzing drivers...")
+        iterator = (
+            parallel_process(self.config, drivers)
+            if self.config.processing_mode == ProcessingMode.PARALLEL
+            else sequential_process(self.config, drivers)
+        )
+
+        for res in iterator:
+            self._consume_driver_result(res, streamer)
+            self.progress.update(advance=1)
+
+        self.progress.finish()
+
+        # Finalize
+        if streamer:
+            try:
+                streamer.write_event(
+                    "batch_end",
+                    path=str(self.config.output_path),
+                    processed=len(self.results),
+                    failed=len(self.failed_drivers),
+                )
+            finally:
+                streamer.close()
+        elapsed = time.time() - start
+        stats = self._make_stats(elapsed)
+        batch = BatchResult(stats=stats, results=self.results, config=self.config)
+
+        # If JSON output requested, dump entire batch at end
+        if self.config.output_format == OutputFormat.JSON:
+            out = self.config.output_path
+            with open(out, "w", encoding="utf-8") as f:
+                data = {
+                    **stats.model_dump(),
+                    "results": [self._result_to_json(r) for r in self.results],
+                }
+                json.dump(data, f, indent=2, default=str)
+            self.console.print(f"\n[green]Results saved to:[/green] {out}")
+        else:
+            self.console.print(f"\n[green]Results streamed to:[/green] {self.config.output_path}")
+
+        # Summary output
+        self._show_summary(stats)
+
+        return batch
+
+    def _consume_driver_result(self, result: DriverResult, streamer: JSONLStreamer | None) -> None:
+        self.results.append(result)
         if result.success:
             if result.vuln_count > 0:
                 self.vulnerable_drivers.append((result.filename, result.vuln_count))
             else:
                 self.clean_drivers.append(result.filename)
         else:
-            error_msg = result.error[0] if result.error else "Unknown error"
-            self.failed_drivers.append((result.filename, error_msg))
+            err = result.error[0] if result.error else "Unknown error"
+            self.failed_drivers.append((result.filename, err))
 
-    def find_drivers(self, path: Path) -> list[Path]:
-        """Find all .sys files in the given path.
+        # Streaming JSONL per driver
+        if streamer:
+            if not self.config.filter_vulnerable or result.vuln_count > 0:
+                streamer.write_driver_result(result)
 
-        Args:
-            path: Path to search for drivers
-
-        Returns:
-            List of driver paths
-        """
-        if path.is_file():
-            return [path] if path.suffix == ".sys" else []
-
-        if self.config.recursive_search:
-            return list(path.rglob("*.sys"))
-        else:
-            return list(path.glob("*.sys"))
-
-    def analyze_path(self, path: Path) -> BatchResult:
-        """Analyze all drivers in the given path.
-
-        Args:
-            path: Path containing drivers to analyze
-
-        Returns:
-            BatchResult with analysis results and statistics
-        """
-        # Validate path
-        if not path.exists():
-            raise ValueError(f"Path not found: {path}")
-
-        # Find drivers
-        self.console.print(Panel.fit("🔍 Scanning for driver files...", style="cyan"))
-        all_drivers = self.find_drivers(path)
-
-        if not all_drivers:
-            self.console.print("[red]No .sys files found[/red]")
-            return BatchResult(stats=AnalysisStats(), results=[], config=self.config)
-
-        self.console.print(f"[green]✓[/green] Found [bold]{len(all_drivers)}[/bold] driver(s)")
-
-        # Filter out already analyzed drivers
-        drivers_to_analyze = [d for d in all_drivers if str(d) not in self.analyzed_drivers]
-
-        if not drivers_to_analyze:
-            self.console.print("[green]All drivers already analyzed[/green]")
-            return self._create_result()
-
-        # Show analysis configuration
-        num_workers = self.config.num_workers or (
-            4 if self.config.processing_mode == ProcessingMode.SAFE else len(drivers_to_analyze)
-        )
-
-        self.console.print(
-            Panel(
-                f"[bold]Starting Analysis[/bold]\n"
-                f"Drivers to analyze: {len(drivers_to_analyze)}\n"
-                f"Processing mode: {self.config.processing_mode.value}\n"
-                f"Parallel workers: {num_workers}\n"
-                f"Timeout per driver: {self.config.timeout_per_driver}s",
-                style="blue",
-            )
-        )
-
-        # Start analysis
-        start_time = time.time()
-
-        # Open output file for streaming if JSONL
-        output_file = None
-        if self.config.output_format == OutputFormat.JSONL:
-            # Open with line buffering (1) for immediate writes
-            output_file = open(self.config.output_path, "a" if self.config.resume_from else "w", buffering=1)
-            # Write previous results if starting fresh
-            if not self.config.resume_from:
-                for result in self.results:
-                    output_file.write(result.model_dump_json() + "\n")
-                    output_file.flush()
-                    # Force OS to write to disk
-                    os.fsync(output_file.fileno())
-
-        try:
-            # Start progress tracking
-            self.progress_tracker.start(len(drivers_to_analyze), "Analyzing drivers...")
-
-            # Process drivers
-            for result in self.processor.process(drivers_to_analyze):
-                self.results.append(result)
-                self._update_stats_from_result(result)
-
-                # Stream to JSONL file if configured
-                if output_file:
-                    output_file.write(result.model_dump_json() + "\n")
-                    output_file.flush()
-                    # Force OS to write to disk immediately
-                    os.fsync(output_file.fileno())
-
-                    # Debug: Log file size after write
-                    if self.config.verbose:
-                        file_size = self.config.output_path.stat().st_size
-                        logger.info(f"Written result for {result.filename}, file size: {file_size} bytes")
-
-            # Finish progress tracking
-            self.progress_tracker.finish()
-
-        finally:
-            if output_file:
-                output_file.close()
-
-        analysis_time = time.time() - start_time
-
-        # Create final result
-        result = self._create_result(analysis_time)
-
-        # Apply filters if requested
-        if self.config.filter_vulnerable:
-            result.results = [r for r in result.results if r.vuln_count > 0]
-
-        # Save results (skip if JSONL since we already streamed)
-        if self.config.output_format != OutputFormat.JSONL:
-            result.save()
-        else:
-            # For JSONL, just append the summary stats
-            with open(self.config.output_path, "a") as f:
-                f.write(result.stats.model_dump_json() + "\n")
-
-        # Show summary
-        if isinstance(self.progress_tracker, ConsoleProgressTracker):
-            self.progress_tracker.show_summary(
-                result.stats.model_dump(), self.vulnerable_drivers if self.vulnerable_drivers else None
-            )
-
-        self.console.print(f"\n[green]Results saved to:[/green] {self.config.output_path}")
-
-        return result
-
-    def _create_result(self, analysis_time: float | None = None) -> BatchResult:
-        """Create BatchResult from current state.
-
-        Args:
-            analysis_time: Total analysis time in seconds
-
-        Returns:
-            BatchResult object
-        """
-        # Calculate statistics
+    def _make_stats(self, total_time: float) -> AnalysisStats:
         total_vulns = sum(r.vuln_count for r in self.results)
-        analyzed_count = len([r for r in self.results if r.success])
-
-        stats = AnalysisStats(
+        analyzed = len([r for r in self.results if r.success])
+        return AnalysisStats(
             total_drivers=len(self.results),
-            analyzed=analyzed_count,
+            analyzed=analyzed,
             failed=len(self.failed_drivers),
             with_vulnerabilities=len(self.vulnerable_drivers),
             total_vulnerabilities=total_vulns,
-            analysis_time=analysis_time or 0,
-            average_time_per_driver=(analysis_time / analyzed_count if analysis_time and analyzed_count else 0),
-            workers_used=getattr(self.processor, "num_workers", None),
+            analysis_time=total_time,
+            average_time_per_driver=(total_time / analyzed if analyzed else 0.0),
+            workers_used=(self.config.num_workers),
         )
 
-        # Add memory stats for safe mode
-        if self.config.processing_mode == ProcessingMode.SAFE:
-            if hasattr(self.processor, "memory_monitor"):
-                mem_stats = self.processor.memory_monitor.get_stats()
-                stats.memory_peak_gb = mem_stats.get("peak_gb")
+    def _show_summary(self, stats: AnalysisStats) -> None:
+        if isinstance(self.progress, ConsoleProgressTracker):
+            self.progress.show_summary(stats.model_dump(), self.vulnerable_drivers or None)
 
-        return BatchResult(stats=stats, results=self.results, config=self.config)
+    @staticmethod
+    def _result_to_json(r: DriverResult) -> dict:
+        if isinstance(r.data, dict):
+            data = r.data
+        else:
+            data = r.data.model_dump() if hasattr(r.data, "model_dump") else {}
+        out = {
+            "driver": str(r.driver_path),
+            "success": r.success,
+            "analysis_time": r.analysis_time,
+            "vuln_count": r.vuln_count,
+        }
+        if data:
+            out["analysis"] = data
+        if r.error:
+            out["error"] = r.error
+        return out
