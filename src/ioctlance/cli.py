@@ -327,6 +327,7 @@ def main(argv: list[str] | None = None) -> int:
                     analysis_time=analysis_time,
                     binary_metadata=result.binary_metadata,
                     errors=result.error if result.error else [],
+                    metrics=getattr(context, "metrics", {}),
                 )
                 # Store the result with the output manager for formatting
                 all_results.append(

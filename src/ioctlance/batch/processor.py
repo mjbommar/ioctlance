@@ -77,7 +77,9 @@ def analyze_single_driver(
 
         # Calculate analysis time and create unified result
         analysis_time = time.time() - start_time
-        unified_result = output_manager.create_result(raw_result=result, analysis_time=analysis_time)
+        unified_result = output_manager.create_result(
+            raw_result=result, analysis_time=analysis_time, metrics=getattr(context, "metrics", {})
+        )
 
         if verbose:
             logger.info(f"Completed analysis of {driver_path.name} in {analysis_time:.2f}s")

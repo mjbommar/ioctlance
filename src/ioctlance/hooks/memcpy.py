@@ -207,7 +207,7 @@ def register_hooks(project: angr.Project) -> None:
     hooked_addrs = set()
 
     # Hook various memory copy functions
-    for func_name in ["memcpy", "memmove", "RtlCopyMemory"]:
+    for func_name in ["memcpy", "memmove", "RtlCopyMemory", "MmCopyMemory"]:
         # Try to find the function in the binary
         symbol = project.loader.find_symbol(func_name)
         if symbol and symbol.rebased_addr not in hooked_addrs:
@@ -239,7 +239,7 @@ def register_hooks(project: angr.Project) -> None:
                 else:
                     continue
 
-                if imp_name in ["memcpy", "memmove", "RtlCopyMemory"] and imp_addr:
+                if imp_name in ["memcpy", "memmove", "RtlCopyMemory", "MmCopyMemory"] and imp_addr:
                     hook_addr = imp_addr
                     if hook_addr and hook_addr not in hooked_addrs:
                         assert isinstance(hook_addr, int), "hook_addr must be int at this point"
@@ -254,7 +254,7 @@ def register_hooks(project: angr.Project) -> None:
 
             # For PE files, also look for PLT stubs (jump thunks)
             if hasattr(project.loader.main_object, "plt"):
-                for func_name in ["memcpy", "memmove", "RtlCopyMemory"]:
+                for func_name in ["memcpy", "memmove", "RtlCopyMemory", "MmCopyMemory"]:
                     if func_name in project.loader.main_object.plt:
                         plt_addr = project.loader.main_object.plt[func_name]
                         if plt_addr not in hooked_addrs:

@@ -115,6 +115,27 @@ class HookWdfRequestRetrieveOutputBuffer(BaseHook):
         return 0
 
 
+class HookWdfRequestRetrieveInputMemory(BaseHook):
+    """Populate SystemBuffer via KMDF Memory object API."""
+
+    def run(self, Request, MinimumRequiredSize, Memory) -> int:
+        context = self.get_context()
+        if context:
+            # best-effort symbolic pointer and length inferred elsewhere
+            context.system_buffer = claripy.BVS("SystemBuffer", self.state.arch.bits)
+        return 0
+
+
+class HookWdfRequestRetrieveOutputMemory(BaseHook):
+    """Populate UserBuffer via KMDF Memory object API."""
+
+    def run(self, Request, MinimumRequiredSize, Memory) -> int:
+        context = self.get_context()
+        if context:
+            context.user_buffer = claripy.BVS("UserBuffer", self.state.arch.bits)
+        return 0
+
+
 class HookWdfRequestGetParameters(BaseHook):
     """Set a symbolic IoControlCode to drive detectors and pruning.
 
@@ -136,6 +157,9 @@ def register_hooks(project) -> None:
         "WdfRequestRetrieveInputBuffer": HookWdfRequestRetrieveInputBuffer,
         "WdfRequestRetrieveOutputBuffer": HookWdfRequestRetrieveOutputBuffer,
         "WdfRequestGetParameters": HookWdfRequestGetParameters,
+        # Memory object variants
+        "WdfRequestRetrieveInputMemory": HookWdfRequestRetrieveInputMemory,
+        "WdfRequestRetrieveOutputMemory": HookWdfRequestRetrieveOutputMemory,
     }
     for name, cls in hooks.items():
         try:

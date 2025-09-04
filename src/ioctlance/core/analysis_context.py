@@ -333,6 +333,9 @@ class AnalysisContext:
     # Symbolic execution state
     simulation_manager: Any | None = None  # angr.SimulationManager
 
+    # Execution metrics across phases (populated by hunter)
+    metrics: dict[str, Any] = field(default_factory=dict)
+
     # Memory addresses for special structures
     irp_addr: int = 0x41410000  # IRP structure address
     irsp_addr: int = 0x41420000  # IO_STACK_LOCATION address
@@ -392,6 +395,7 @@ class AnalysisContext:
             self.error_messages = []
             self.vuln_buffer = []
             self.simulation_manager = None
+            self.metrics = {}
             self.irp_addr = 0x41410000
             self.irsp_addr = 0x41420000
             self.do_nothing_addr = 0x42420000
@@ -442,6 +446,7 @@ class AnalysisContext:
             "unique_addresses",
             "detectors",
             "output_manager",
+            "metrics",
         ):
             if field_name in kwargs:
                 setattr(self, field_name, kwargs[field_name])
@@ -477,6 +482,8 @@ class AnalysisContext:
             self.vuln_buffer = []
         if not hasattr(self, "simulation_manager"):
             self.simulation_manager = None
+        if not hasattr(self, "metrics"):
+            self.metrics = {}
         if not hasattr(self, "irp_addr"):
             self.irp_addr = 0x41410000
         if not hasattr(self, "irsp_addr"):
@@ -558,6 +565,14 @@ class AnalysisContext:
             driver_path=path,
             output_manager=output_manager,
         )
+
+        # Clear global symbolic buffer cache between analyses (same process)
+        try:
+            from ..symbolic.breakpoints import clear_symbolic_buffer_cache
+
+            clear_symbolic_buffer_cache()
+        except Exception:
+            pass
 
         # Initialize output manager if provided
         if output_manager:

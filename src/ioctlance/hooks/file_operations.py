@@ -38,6 +38,12 @@ def register_hooks(project) -> None:
         logger.debug("Hooked ZwWriteFile")
     except Exception as e:
         logger.debug(f"Failed to hook ZwWriteFile: {e}")
+    # Register ZwReadFile
+    try:
+        project.hook_symbol("ZwReadFile", ZwReadFile(cc=cc), replace=True)
+        logger.debug("Hooked ZwReadFile")
+    except Exception as e:
+        logger.debug(f"Failed to hook ZwReadFile: {e}")
 
     # Register ZwDeleteFile
     try:
@@ -238,6 +244,53 @@ class ZwWriteFile(BaseHook):
                         if vuln:
                             context.add_vulnerability(vuln)
                             logger.info(f"[ZwWriteFile] Vulnerability detected: {vuln['title']}")
+                except Exception:
+                    pass
+
+        # Return STATUS_SUCCESS
+        return claripy.BVV(0, self.state.arch.bits)
+
+
+class ZwReadFile(BaseHook):
+    """Hook for ZwReadFile."""
+
+    def run(
+        self,
+        file_handle,
+        event,
+        apc_routine,
+        apc_context,
+        io_status_block,
+        buffer,
+        length,
+        byte_offset,
+        key,
+    ):
+        """Execute ZwReadFile hook."""
+        logger.debug(f"[ZwReadFile] Called at {hex(self.state.addr)}")
+
+        context = self.get_context()
+        if context:
+            for detector in getattr(context, "detectors", []) or []:
+                try:
+                    if hasattr(detector, "check_state"):
+                        vuln = detector.check_state(
+                            self.state,
+                            "function_call",
+                            function_name="ZwReadFile",
+                            file_handle=file_handle,
+                            event=event,
+                            apc_routine=apc_routine,
+                            apc_context=apc_context,
+                            io_status_block=io_status_block,
+                            buffer=buffer,
+                            length=length,
+                            byte_offset=byte_offset,
+                            key=key,
+                        )
+                        if vuln:
+                            context.add_vulnerability(vuln)
+                            logger.info(f"[ZwReadFile] Vulnerability detected: {vuln['title']}")
                 except Exception:
                     pass
 

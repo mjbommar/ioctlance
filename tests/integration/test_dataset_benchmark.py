@@ -21,7 +21,7 @@ def dataset_dir():
     return Path(__file__).parent.parent / "dataset"
 
 
-@pytest.fixture(scope="module") 
+@pytest.fixture(scope="module")
 def output_dir(tmp_path_factory):
     """Create output directory for benchmark results."""
     return tmp_path_factory.mktemp("benchmark_results")

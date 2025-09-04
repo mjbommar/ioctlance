@@ -71,8 +71,18 @@ class ExplosionDetector(angr.exploration_techniques.ExplorationTechnique):
         Returns:
             True if the IOCTL has timed out, False otherwise
         """
-        if "IoControlCode" in state.globals:
-            return state.globals["IoControlCode"] == ioctl
+        try:
+            if "IoControlCode" in state.globals:
+                return state.globals["IoControlCode"] == ioctl
+            # Fallback: if the context's IoControlCode is concretized, compare it
+            icc = self.context.io_control_code
+            if icc is not None and not state.solver.symbolic(icc):
+                try:
+                    return state.solver.eval(icc) == ioctl
+                except Exception:
+                    return False
+        except Exception:
+            return False
         return False
 
     def step(self, simgr: SimulationManager, stash: str = "active", **kwargs: Any) -> SimulationManager:

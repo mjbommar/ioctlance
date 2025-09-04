@@ -70,6 +70,19 @@ class SymbolicBufferCache:
 # Global instance
 _buffer_cache = SymbolicBufferCache()
 
+
+def clear_symbolic_buffer_cache() -> None:
+    """Clear the global symbolic buffer cache.
+
+    Intended to be called between driver analyses to prevent cross-run
+    memory buildup when the same Python process is reused (e.g., batch runs).
+    """
+    try:
+        _buffer_cache.clear()
+    except Exception:
+        pass
+
+
 # Target buffers for null pointer dereference detection
 NPD_TARGETS = ["SystemBuffer", "Type3InputBuffer", "UserBuffer"]
 
@@ -98,7 +111,11 @@ def b_mem_write_DriverStartIo(state: SimState, context: AnalysisContext) -> None
         context: Analysis context
     """
     driver_startio_addr = state.solver.eval(state.inspect.mem_write_expr)
-    # Store in context if we add a DriverStartIo field
+    # Store in context for IoStartPacket trampoline
+    try:
+        context.DriverStartIo = int(driver_startio_addr)
+    except Exception:
+        context.DriverStartIo = int(driver_startio_addr) if driver_startio_addr is not None else 0
     logger.debug(f"DriverStartIo: {hex(int(driver_startio_addr))}")
 
 
@@ -114,6 +131,10 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
         state: Current simulation state
         context: Analysis context
     """
+    # Guard against symbolic truthiness issues and missing inspect fields
+    addr = getattr(state.inspect, "mem_read_address", None)
+    if addr is None:
+        return
     # Track calls for debugging
     if not hasattr(context, "_b_mem_read_count"):
         context._b_mem_read_count = 0
@@ -126,11 +147,6 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
             )
         except Exception:
             logger.info(f"b_mem_read #{context._b_mem_read_count}: <unable to stringify>")
-
-    # Guard against symbolic truthiness issues and missing inspect fields
-    addr = getattr(state.inspect, "mem_read_address", None)
-    if addr is None:
-        return
     context.print_debug(
         f"mem_read {state}, addr={addr}, "
         f"expr={getattr(state.inspect, 'mem_read_expr', None)}, len={getattr(state.inspect, 'mem_read_length', None)}"
@@ -184,106 +200,126 @@ def b_mem_read(state: SimState, context: AnalysisContext) -> None:
             has_target = target in addr_str_cache
         if not has_target:
             continue
-            asts = [i for i in addr.children_asts()] if hasattr(addr, "children_asts") else []
-            target_base = asts[0] if len(asts) > 1 else addr
-            vars = getattr(addr, "variables", set())
 
-            # Check if not already validated by ProbeForRead/Write
-            tainted_probe_read = state.globals.get("tainted_ProbeForRead", ())
-            tainted_probe_write = state.globals.get("tainted_ProbeForWrite", ())
-            tainted_mmisvalid = state.globals.get("tainted_MmIsAddressValid", ())
+        # Establish target base and variables once we know this target matches
+        asts = [i for i in addr.children_asts()] if hasattr(addr, "children_asts") else []
+        target_base = asts[0] if len(asts) > 1 else addr
+        vars = getattr(addr, "variables", set())
 
-            if (
-                str(target_base) not in tainted_probe_read
-                and str(target_base) not in tainted_probe_write
-                and len(vars) >= 1
-            ):
-                tmp_state = state.copy()
+        # Check if not already validated by ProbeForRead/Write
+        tainted_probe_read = state.globals.get("tainted_ProbeForRead", ())
+        tainted_probe_write = state.globals.get("tainted_ProbeForWrite", ())
+        tainted_mmisvalid = state.globals.get("tainted_MmIsAddressValid", ())
 
-                if target == "SystemBuffer":
-                    if "*" in str(addr):
-                        # SystemBuffer is a pointer - check if controllable
-                        tmp_state.solver.add(tmp_state.inspect.mem_read_address == 0x87)
-                        if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
-                            _record_vulnerability(
-                                context,
-                                state,
-                                title="Arbitrary Read/Write - Controllable Address",
-                                description="read input buffer",
-                                others={"read from": str(addr)},
-                            )
-                    else:
-                        # SystemBuffer is not a pointer - check for null
-                        tmp_state.solver.add(context.system_buffer == 0)
-                        tmp_state.solver.add(context.input_buffer_length == 0)
-                        tmp_state.solver.add(context.output_buffer_length == 0)
-                        if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
-                            _record_vulnerability(
-                                context,
-                                state,
-                                title="null pointer dereference - input buffer",
-                                description="read input buffer",
-                                others={"read from": str(addr)},
-                            )
-
-                elif target in ("Type3InputBuffer", "UserBuffer"):
-                    # Check if Type3InputBuffer or UserBuffer is controllable
-                    if target == "Type3InputBuffer":
-                        tmp_state.solver.add(context.type3_input_buffer == 0x87)
-                    else:
-                        tmp_state.solver.add(context.user_buffer == 0x87)
-
-                    if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
+        if (
+            str(target_base) not in tainted_probe_read
+            and str(target_base) not in tainted_probe_write
+            and len(vars) >= 1
+        ):
+            if target == "SystemBuffer":
+                if "*" in str(addr):
+                    # SystemBuffer is a pointer - check if controllable
+                    can_ctrl = False
+                    try:
+                        can_ctrl = state.solver.satisfiable(extra_constraints=[state.inspect.mem_read_address == 0x87])
+                    except Exception:
+                        can_ctrl = False
+                    if can_ctrl and str(target_base) not in tainted_mmisvalid:
                         _record_vulnerability(
                             context,
                             state,
-                            title=f"Arbitrary Read/Write - {target}",
-                            description="read",
+                            title="Arbitrary Read/Write - Controllable Address",
+                            description="read input buffer",
                             others={"read from": str(addr)},
                         )
                 else:
-                    # Detect null pointer in allocated memory
-                    # Attempt cheap check without full stringify
-                    addr_plus_sign = None
+                    # SystemBuffer is not a pointer - check for null
+                    null_ok = False
                     try:
-                        addr_plus_sign = "+" in (addr_str_cache if addr_str_cache is not None else str(addr))
+                        null_ok = state.solver.satisfiable(
+                            extra_constraints=[
+                                context.system_buffer == 0,
+                                context.input_buffer_length == 0,
+                                context.output_buffer_length == 0,
+                            ]
+                        )
                     except Exception:
-                        addr_plus_sign = False
-                    if not addr_plus_sign:
-                        tmp_state.solver.add(addr == 0)
-                        if tmp_state.satisfiable():
-                            _record_vulnerability(
-                                context,
-                                state,
-                                title="Null Pointer Dereference - Allocated Memory",
-                                description="read allocated memory",
-                                others={"read from": str(addr)},
-                            )
+                        null_ok = False
+                    if null_ok and str(target_base) not in tainted_mmisvalid:
+                        _record_vulnerability(
+                            context,
+                            state,
+                            title="null pointer dereference - input buffer",
+                            description="read input buffer",
+                            others={"read from": str(addr)},
+                        )
 
-            # Symbolize tainted buffer addresses for vulnerability detection
-            from ..utils.helpers import is_tainted_buffer
-
-            if is_tainted_buffer(target_base) and str(target_base) not in state.globals:
-                # Use minimal constraint check instead of full state copy
-                can_be_valid = False
+            elif target in ("Type3InputBuffer", "UserBuffer"):
+                # Check if Type3InputBuffer or UserBuffer is controllable
+                constraint = (
+                    context.type3_input_buffer == 0x87 if target == "Type3InputBuffer" else context.user_buffer == 0x87
+                )
+                can_ctrl2 = False
                 try:
-                    # Quick satisfiability check without copying entire state
-                    test_addr = context.next_base_addr()
-                    can_be_valid = state.solver.satisfiable(extra_constraints=[target_base == test_addr])
-                except:
-                    pass
+                    can_ctrl2 = state.solver.satisfiable(extra_constraints=[constraint])
+                except Exception:
+                    can_ctrl2 = False
 
-                if can_be_valid:
-                    globals_dict = get_state_globals(state)
-                    key = str(target_base)[:64]  # Limit key length
-                    globals_dict[key] = True
+                if can_ctrl2 and str(target_base) not in tainted_mmisvalid:
+                    _record_vulnerability(
+                        context,
+                        state,
+                        title=f"Arbitrary Read/Write - {target}",
+                        description="read",
+                        others={"read from": str(addr)},
+                    )
+            else:
+                # Detect null pointer in allocated memory
+                # Attempt cheap check without full stringify
+                addr_plus_sign = None
+                try:
+                    addr_plus_sign = "+" in (addr_str_cache if addr_str_cache is not None else str(addr))
+                except Exception:
+                    addr_plus_sign = False
+                if not addr_plus_sign:
+                    null_read = False
+                    try:
+                        null_read = state.solver.satisfiable(extra_constraints=[addr == 0])
+                    except Exception:
+                        null_read = False
+                    if null_read:
+                        _record_vulnerability(
+                            context,
+                            state,
+                            title="Null Pointer Dereference - Allocated Memory",
+                            description="read allocated memory",
+                            others={"read from": str(addr)},
+                        )
 
-                    # Use cached buffer instead of creating new one
-                    addr, mem = _buffer_cache.get_or_create(key, state, context)
-                    state.solver.add(target_base == addr)
-                    # Store smaller buffer (was 0x200, now from cache)
-                    size = min(_buffer_cache.max_size, 0x100)
-                    state.memory.store(addr, mem, size, disable_actions=True, inspect=False)
+        # Symbolize tainted buffer addresses for vulnerability detection
+        from ..utils.helpers import is_tainted_buffer
+
+        if is_tainted_buffer(target_base) and str(target_base) not in state.globals:
+            # Use minimal constraint check instead of full state copy
+            can_be_valid = False
+            try:
+                # Quick satisfiability check without copying entire state
+                test_addr = context.next_base_addr()
+                can_be_valid = state.solver.satisfiable(extra_constraints=[target_base == test_addr])
+            except:
+                pass
+
+            if can_be_valid:
+                globals_dict = get_state_globals(state)
+                key = str(target_base)[:64]  # Limit key length
+                globals_dict[key] = True
+
+                # Use cached buffer instead of creating new one
+                addr, mem = _buffer_cache.get_or_create(key, state, context)
+                state.solver.add(target_base == addr)
+                # Store smaller buffer (was 0x200, now from cache)
+                size = min(_buffer_cache.max_size, 0x100)
+                state.memory.store(addr, mem, size, disable_actions=True, inspect=False)
 
 
 def b_mem_write(state: SimState, context: AnalysisContext) -> None:
@@ -341,104 +377,126 @@ def b_mem_write(state: SimState, context: AnalysisContext) -> None:
             has_target = target in addrw_str_cache
         if not has_target:
             continue
-            asts = [i for i in addr_w.children_asts()] if hasattr(addr_w, "children_asts") else []
-            target_base = asts[0] if len(asts) > 1 else addr_w
-            vars = getattr(addr_w, "variables", set())
 
-            tainted_probe_read = state.globals.get("tainted_ProbeForRead", ())
-            tainted_probe_write = state.globals.get("tainted_ProbeForWrite", ())
-            tainted_mmisvalid = state.globals.get("tainted_MmIsAddressValid", ())
+        # Establish target base and variables once we know this target matches
+        asts = [i for i in addr_w.children_asts()] if hasattr(addr_w, "children_asts") else []
+        target_base = asts[0] if len(asts) > 1 else addr_w
+        vars = getattr(addr_w, "variables", set())
 
-            if (
-                str(target_base) not in tainted_probe_read
-                and str(target_base) not in tainted_probe_write
-                and len(vars) >= 1
-            ):
-                tmp_state = state.copy()
+        tainted_probe_read = state.globals.get("tainted_ProbeForRead", ())
+        tainted_probe_write = state.globals.get("tainted_ProbeForWrite", ())
+        tainted_mmisvalid = state.globals.get("tainted_MmIsAddressValid", ())
 
-                if target == "SystemBuffer":
-                    if "*" in str(addr_w):
-                        # Arbitrary write through SystemBuffer pointer
-                        tmp_state.solver.add(tmp_state.inspect.mem_write_address == 0x87)
-                        if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
-                            _record_vulnerability(
-                                context,
-                                state,
-                                title="Arbitrary Write",
-                                description="write through controllable pointer",
-                                others={"write to": str(addr_w)},
-                            )
-                    else:
-                        # Null pointer write
-                        tmp_state.solver.add(context.system_buffer == 0)
-                        tmp_state.solver.add(context.input_buffer_length == 0)
-                        tmp_state.solver.add(context.output_buffer_length == 0)
-                        if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
-                            _record_vulnerability(
-                                context,
-                                state,
-                                title="Null Pointer Dereference - Output Buffer",
-                                description="write to output buffer",
-                                others={"write to": str(addr_w)},
-                            )
-
-                elif target in ("Type3InputBuffer", "UserBuffer"):
-                    # Arbitrary write through Type3InputBuffer/UserBuffer
-                    if target == "Type3InputBuffer":
-                        tmp_state.solver.add(context.type3_input_buffer == 0x87)
-                    else:
-                        tmp_state.solver.add(context.user_buffer == 0x87)
-
-                    if tmp_state.satisfiable() and str(target_base) not in tainted_mmisvalid:
+        if (
+            str(target_base) not in tainted_probe_read
+            and str(target_base) not in tainted_probe_write
+            and len(vars) >= 1
+        ):
+            if target == "SystemBuffer":
+                if "*" in str(addr_w):
+                    # Arbitrary write through SystemBuffer pointer
+                    can_ctrl = False
+                    try:
+                        can_ctrl = state.solver.satisfiable(extra_constraints=[state.inspect.mem_write_address == 0x87])
+                    except Exception:
+                        can_ctrl = False
+                    if can_ctrl and str(target_base) not in tainted_mmisvalid:
                         _record_vulnerability(
                             context,
                             state,
-                            title=f"Arbitrary Write - {target}",
+                            title="Arbitrary Write",
                             description="write through controllable pointer",
                             others={"write to": str(addr_w)},
                         )
                 else:
-                    # Detect null pointer in allocated memory
-                    addrw_plus_sign = None
+                    # Null pointer write
+                    null_ok = False
                     try:
-                        addrw_plus_sign = "+" in (addrw_str_cache if addrw_str_cache is not None else str(addr_w))
+                        null_ok = state.solver.satisfiable(
+                            extra_constraints=[
+                                context.system_buffer == 0,
+                                context.input_buffer_length == 0,
+                                context.output_buffer_length == 0,
+                            ]
+                        )
                     except Exception:
-                        addrw_plus_sign = False
-                    if not addrw_plus_sign:
-                        tmp_state.solver.add(addr_w == 0)
-                        if tmp_state.satisfiable():
-                            _record_vulnerability(
-                                context,
-                                state,
-                                title="Null Pointer Dereference - Allocated Memory",
-                                description="write allocated memory",
-                                others={"write to": str(addr_w)},
-                            )
+                        null_ok = False
+                    if null_ok and str(target_base) not in tainted_mmisvalid:
+                        _record_vulnerability(
+                            context,
+                            state,
+                            title="Null Pointer Dereference - Output Buffer",
+                            description="write to output buffer",
+                            others={"write to": str(addr_w)},
+                        )
 
-            # Symbolize tainted buffer addresses for vulnerability detection
-            from ..utils.helpers import is_tainted_buffer
+            elif target in ("Type3InputBuffer", "UserBuffer"):
+                # Arbitrary write through Type3InputBuffer/UserBuffer
+                if target == "Type3InputBuffer":
+                    constraint = context.type3_input_buffer == 0x87
+                else:
+                    constraint = context.user_buffer == 0x87
 
-            if is_tainted_buffer(target_base) and str(target_base) not in state.globals:
-                # Use minimal constraint check instead of full state copy
-                can_be_valid = False
+                can_ctrl2 = False
                 try:
-                    # Quick satisfiability check without copying entire state
-                    test_addr = context.next_base_addr()
-                    can_be_valid = state.solver.satisfiable(extra_constraints=[target_base == test_addr])
-                except:
-                    pass
+                    can_ctrl2 = state.solver.satisfiable(extra_constraints=[constraint])
+                except Exception:
+                    can_ctrl2 = False
 
-                if can_be_valid:
-                    globals_dict = get_state_globals(state)
-                    key = str(target_base)[:64]  # Limit key length
-                    globals_dict[key] = True
+                if can_ctrl2 and str(target_base) not in tainted_mmisvalid:
+                    _record_vulnerability(
+                        context,
+                        state,
+                        title=f"Arbitrary Write - {target}",
+                        description="write through controllable pointer",
+                        others={"write to": str(addr_w)},
+                    )
+            else:
+                # Detect null pointer in allocated memory
+                addrw_plus_sign = None
+                try:
+                    addrw_plus_sign = "+" in (addrw_str_cache if addrw_str_cache is not None else str(addr_w))
+                except Exception:
+                    addrw_plus_sign = False
+                if not addrw_plus_sign:
+                    null_write = False
+                    try:
+                        null_write = state.solver.satisfiable(extra_constraints=[addr_w == 0])
+                    except Exception:
+                        null_write = False
+                    if null_write:
+                        _record_vulnerability(
+                            context,
+                            state,
+                            title="Null Pointer Dereference - Allocated Memory",
+                            description="write allocated memory",
+                            others={"write to": str(addr_w)},
+                        )
 
-                    # Use cached buffer instead of creating new one
-                    addr, mem = _buffer_cache.get_or_create(key, state, context)
-                    state.solver.add(target_base == addr)
-                    # Store smaller buffer (was 0x200, now from cache)
-                    size = min(_buffer_cache.max_size, 0x100)
-                    state.memory.store(addr, mem, size, disable_actions=True, inspect=False)
+        # Symbolize tainted buffer addresses for vulnerability detection
+        from ..utils.helpers import is_tainted_buffer
+
+        if is_tainted_buffer(target_base) and str(target_base) not in state.globals:
+            # Use minimal constraint check instead of full state copy
+            can_be_valid = False
+            try:
+                # Quick satisfiability check without copying entire state
+                test_addr = context.next_base_addr()
+                can_be_valid = state.solver.satisfiable(extra_constraints=[target_base == test_addr])
+            except:
+                pass
+
+            if can_be_valid:
+                globals_dict = get_state_globals(state)
+                key = str(target_base)[:64]  # Limit key length
+                globals_dict[key] = True
+
+                # Use cached buffer instead of creating new one
+                addr, mem = _buffer_cache.get_or_create(key, state, context)
+                state.solver.add(target_base == addr)
+                # Store smaller buffer (was 0x200, now from cache)
+                size = min(_buffer_cache.max_size, 0x100)
+                state.memory.store(addr, mem, size, disable_actions=True, inspect=False)
 
 
 def b_call(state: SimState, context: AnalysisContext) -> None:

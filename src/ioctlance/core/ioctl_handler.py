@@ -174,8 +174,14 @@ class IOCTLHandlerFinder:
         Args:
             state: The current simulation state
         """
-        # Handle DriverStartIo if needed
-        pass
+        # Store the DriverStartIo address in context for later use by IoStartPacket hook
+        try:
+            from ..symbolic.breakpoints import b_mem_write_DriverStartIo
+
+            b_mem_write_DriverStartIo(state, self.context)
+        except Exception:
+            # Non-fatal
+            return
 
     def _next_base_addr(self) -> int:
         """Get the next available base address for allocation.

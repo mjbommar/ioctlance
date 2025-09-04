@@ -1,11 +1,14 @@
 """Base hook class for Windows kernel API simulation."""
 
+import logging
 import archinfo
 from typing import Any
 from angr import SimProcedure
 from angr.calling_conventions import SimCCMicrosoftAMD64, SimCCStdcall
 
 from ..utils.error_handler import SymbolicExecutionErrorHandler
+
+logger = logging.getLogger(__name__)
 
 
 class BaseHook(SimProcedure):
@@ -31,8 +34,19 @@ class BaseHook(SimProcedure):
             func_name: Name of the function being hooked
             *args: Arguments passed to the function
         """
-        if self.log_calls:
-            ", ".join(f"{hex(arg) if isinstance(arg, int) else arg}" for arg in args)
+        if not self.log_calls:
+            # Allow debug logging when context is verbose/debug
+            ctx = self.get_context()
+            if not (ctx and getattr(ctx.config, "debug", False)):
+                return
+        try:
+            rendered = ", ".join(f"{hex(arg) if isinstance(arg, int) else str(arg)}" for arg in args)
+            logger.debug(
+                f"[HOOK] {func_name}({rendered}) @ {hex(self.state.addr) if hasattr(self.state, 'addr') else ''}"
+            )
+        except Exception:
+            # Logging must not break execution
+            pass
 
     def get_context(self):
         """Get the analysis context from state globals.

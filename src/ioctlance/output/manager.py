@@ -54,6 +54,9 @@ class UnifiedAnalysisResult(BaseModel):
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
+    # Execution metrics (peak states, pruning, RSS, etc.)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+
     # Raw analysis result (legacy format)
     raw_result: AnalysisResult | None = Field(None)
 
@@ -176,6 +179,7 @@ class OutputManager:
         binary_metadata: CompleteMetadata | None = None,
         errors: list[str] | None = None,
         warnings: list[str] | None = None,
+        metrics: dict[str, Any] | None = None,
     ) -> UnifiedAnalysisResult:
         """Create unified analysis result.
 
@@ -309,6 +313,7 @@ class OutputManager:
             errors=errors or [],
             warnings=warnings or [],
             raw_result=raw_result,
+            metrics=metrics or {},
         )
 
     def format_output(self, result: UnifiedAnalysisResult) -> str:
@@ -358,6 +363,8 @@ class OutputManager:
                 "details": result.ioctl_discovery_details,
             }
             data["config"] = result.config
+            if result.metrics:
+                data["metrics"] = result.metrics
 
         if self.output_level.value >= OutputLevel.DEBUG.value:
             data["vulnerabilities"] = [v.to_rich_dict(include_raw_state=False) for v in result.vulnerabilities]

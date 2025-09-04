@@ -12,14 +12,16 @@ class HookProbeForRead(BaseHook):
         """Mark buffer as validated for read operations."""
         context = self.get_context()
 
-        # Check for vulnerabilities with our detector
-        if context:
-            from ..detectors.unified_input_validation import UnifiedInputValidationDetector
-
-            detector = UnifiedInputValidationDetector(context)
-            vuln = detector.check_probe_for_read(self.state, Address, Length, Alignment)
-            if vuln:
-                context.add_vulnerability(vuln)
+        # Check for vulnerabilities with existing detectors (avoid re-instantiation)
+        if context and getattr(context, "detectors", None):
+            for det in context.detectors:
+                try:
+                    if hasattr(det, "check_probe_for_read") and det.enabled:
+                        vuln = det.check_probe_for_read(self.state, Address, Length, Alignment)
+                        if vuln:
+                            context.add_vulnerability(vuln)
+                except Exception:
+                    continue
 
         # Track this address as validated
         if "tainted_ProbeForRead" not in self.state.globals:
@@ -40,14 +42,16 @@ class HookProbeForWrite(BaseHook):
         """Mark buffer as validated for write operations."""
         context = self.get_context()
 
-        # Check for vulnerabilities with our detector
-        if context:
-            from ..detectors.unified_input_validation import UnifiedInputValidationDetector
-
-            detector = UnifiedInputValidationDetector(context)
-            vuln = detector.check_probe_for_write(self.state, Address, Length, Alignment)
-            if vuln:
-                context.add_vulnerability(vuln)
+        # Check for vulnerabilities with existing detectors (avoid re-instantiation)
+        if context and getattr(context, "detectors", None):
+            for det in context.detectors:
+                try:
+                    if hasattr(det, "check_probe_for_write") and det.enabled:
+                        vuln = det.check_probe_for_write(self.state, Address, Length, Alignment)
+                        if vuln:
+                            context.add_vulnerability(vuln)
+                except Exception:
+                    continue
 
         # Track this address as validated
         if "tainted_ProbeForWrite" not in self.state.globals:
@@ -114,15 +118,16 @@ class HookMmMapIoSpace(BaseHook):
         """Map I/O space."""
         context = self.get_context()
 
-        # Check for vulnerabilities with our detector
-        if context:
-            from ..detectors.unified_privilege_escalation import UnifiedPrivilegeEscalationDetector
-
-            # Try to get existing detector instance or create new one
-            detector = UnifiedPrivilegeEscalationDetector(context)
-            vuln = detector.check_mmmapiosspace(self.state, PhysicalAddress, NumberOfBytes, CacheType)
-            if vuln:
-                context.add_vulnerability(vuln)
+        # Check for vulnerabilities with our detector (reuse instances)
+        if context and getattr(context, "detectors", None):
+            for det in context.detectors:
+                try:
+                    if hasattr(det, "check_mmmapiosspace") and det.enabled:
+                        vuln = det.check_mmmapiosspace(self.state, PhysicalAddress, NumberOfBytes, CacheType)
+                        if vuln:
+                            context.add_vulnerability(vuln)
+                except Exception:
+                    continue
 
         size = self.state.solver.min(NumberOfBytes)
 
@@ -199,6 +204,72 @@ class HookMmFreeContiguousMemory(BaseHook):
         return None
 
 
+class HookMmMapLockedPagesSpecifyCache(BaseHook):
+    """Hook for MmMapLockedPagesSpecifyCache - maps locked pages into system space.
+
+    We do not parse the MDL; we return a new symbolic pointer with a modest
+    symbolic backing store to drive subsequent reads/writes.
+    """
+
+    def run(self, MemoryDescriptorList, AccessMode, CacheType, BaseAddress, BugCheckOnFailure, Priority):
+        context = self.get_context()
+        size = 0x200  # modest default to avoid memory bloat
+        base = context.next_base_addr() if context else 0x64000000
+        buf = claripy.BVS("locked_pages_map", 8 * size)
+        self.state.memory.store(base, buf, size, disable_actions=True, inspect=False)
+
+        # Notify detectors generically
+        if context and getattr(context, "detectors", None):
+            for det in context.detectors:
+                try:
+                    if hasattr(det, "check_state") and det.enabled:
+                        det.check_state(
+                            self.state,
+                            "call",
+                            function_name="MmMapLockedPagesSpecifyCache",
+                            mdl=MemoryDescriptorList,
+                            access_mode=AccessMode,
+                            cache_type=CacheType,
+                        )
+                except Exception:
+                    continue
+
+        return base
+
+
+class HookMmAllocatePagesForMdl(BaseHook):
+    """Hook for MmAllocatePagesForMdl - allocates physical pages and returns an MDL.
+
+    We create a small symbolic MDL buffer to represent the allocated pages.
+    """
+
+    def run(self, LowAddress, HighAddress, SkipBytes, TotalBytes):
+        context = self.get_context()
+        # Keep symbolic footprint small but non-trivial
+        mdl_size = 0x100
+        mdl_addr = context.next_base_addr() if context else 0x65000000
+        mdl = claripy.BVS("mdl_alloc", 8 * mdl_size)
+        self.state.memory.store(mdl_addr, mdl, mdl_size, disable_actions=True, inspect=False)
+
+        # Notify detectors generically
+        if context and getattr(context, "detectors", None):
+            for det in context.detectors:
+                try:
+                    if hasattr(det, "check_state") and det.enabled:
+                        det.check_state(
+                            self.state,
+                            "call",
+                            function_name="MmAllocatePagesForMdl",
+                            low=LowAddress,
+                            high=HighAddress,
+                            total=TotalBytes,
+                        )
+                except Exception:
+                    continue
+
+        return mdl_addr
+
+
 class HookMmCopyMemory(BaseHook):
     """Hook for MmCopyMemory to notify detectors of arbitrary copy semantics."""
 
@@ -246,6 +317,8 @@ def register_hooks(project) -> None:
         "MmGetPhysicalAddress": HookMmGetPhysicalAddress,
         "MmAllocateContiguousMemory": HookMmAllocateContiguousMemory,
         "MmFreeContiguousMemory": HookMmFreeContiguousMemory,
+        "MmMapLockedPagesSpecifyCache": HookMmMapLockedPagesSpecifyCache,
+        "MmAllocatePagesForMdl": HookMmAllocatePagesForMdl,
         "MmCopyMemory": HookMmCopyMemory,
     }
 
