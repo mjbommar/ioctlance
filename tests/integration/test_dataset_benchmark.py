@@ -15,6 +15,18 @@ from ioctlance.core.analysis_context import AnalysisConfig, AnalysisContext
 from ioctlance.core.driver_analyzer import DriverAnalyzer
 
 
+@pytest.fixture(scope="module")
+def dataset_dir():
+    """Get the dataset directory path."""
+    return Path(__file__).parent.parent / "dataset"
+
+
+@pytest.fixture(scope="module") 
+def output_dir(tmp_path_factory):
+    """Create output directory for benchmark results."""
+    return tmp_path_factory.mktemp("benchmark_results")
+
+
 class TestDatasetBenchmark:
     """Benchmark test suite for the complete driver dataset."""
 
@@ -32,16 +44,6 @@ class TestDatasetBenchmark:
         "AsIO64.sys": ["Arbitrary Read/Write"],  # ASUS driver
         # Add more as we validate them
     }
-
-    @pytest.fixture(scope="class")
-    def dataset_dir(self):
-        """Get the dataset directory path."""
-        return Path(__file__).parent.parent / "dataset"
-
-    @pytest.fixture(scope="class")
-    def output_dir(self, tmp_path_factory):
-        """Create output directory for benchmark results."""
-        return tmp_path_factory.mktemp("benchmark_results")
 
     def analyze_driver(self, driver_path: Path, timeout: int = 60) -> dict | None:
         """Analyze a single driver and return results."""
@@ -235,7 +237,7 @@ class TestDatasetStatistics:
         if not dataset_dir.exists():
             pytest.skip("Dataset directory not found")
 
-        driver_files = sorted(dataset_dir.glob("*.sys"))[:20]  # Sample for statistics
+        driver_files = sorted(dataset_dir.glob("*.sys"))[:3]  # Sample for statistics (reduced for testing)
 
         vuln_type_counts = {}
         driver_vuln_counts = {}

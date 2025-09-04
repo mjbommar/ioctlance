@@ -25,7 +25,7 @@ class TestDetectorRegistry:
             else:
                 pytest.skip("No test drivers available")
 
-        config = AnalysisConfig(timeout=5, debug=False)
+        config = AnalysisConfig(timeout=5, ioctl_timeout=5, debug=False)
         return AnalysisContext.create_for_driver(driver_path, config)
 
     def test_registry_has_detectors(self):
@@ -93,7 +93,7 @@ class TestSpecificDetectors:
         if not driver_path.exists():
             pytest.skip("test_physical_memory.sys not found")
 
-        config = AnalysisConfig(timeout=5, debug=False)
+        config = AnalysisConfig(timeout=5, ioctl_timeout=5, debug=False)
         return AnalysisContext.create_for_driver(driver_path, config)
 
     @pytest.fixture
@@ -105,7 +105,7 @@ class TestSpecificDetectors:
         if not driver_path.exists():
             pytest.skip("test_process_termination.sys not found")
 
-        config = AnalysisConfig(timeout=5, debug=False)
+        config = AnalysisConfig(timeout=5, ioctl_timeout=5, debug=False)
         return AnalysisContext.create_for_driver(driver_path, config)
 
     def test_unified_privilege_escalation_detector_initialization(self, physical_memory_context):

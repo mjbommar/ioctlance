@@ -264,7 +264,7 @@ class TestAnalysisContextIntegration:
         test_file.write_bytes(b"MZ" + b"\x00" * 100)  # Minimal PE header
         
         output_manager = OutputManager()
-        config = AnalysisConfig(timeout=10)
+        config = AnalysisConfig(timeout=10, ioctl_timeout=10)
         
         # This will fail with real angr loading, but tests the interface
         with pytest.raises(Exception):
