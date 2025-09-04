@@ -27,6 +27,7 @@ from ioctlance.core.driver_analyzer import DriverAnalyzer
 from ioctlance.output.manager import OutputManager, UnifiedAnalysisResult
 from ioctlance.output.formats import OutputFormat, OutputLevel
 from ioctlance.output.fingerprint import DriverFingerprint
+from ioctlance.__version__ import __version__
 
 
 class PerformanceMonitor:
@@ -201,52 +202,50 @@ class BenchmarkRunner:
                 capture_raw_state=False  # Reduce memory usage for benchmarks
             )
             
-            # Use safe analyzer for profiles or standard analyzer
-            if self.profile in ["fast", "balanced", "thorough", "paranoid"]:
-                # Use safe analyzer with profile
-                from ioctlance.batch.safe_analyzer import analyze_driver_safe_with_unified_output
-                
-                phase_start = time.time()
-                unified_result = analyze_driver_safe_with_unified_output(
-                    driver_path,
-                    profile=self.profile,
-                    timeout_override=self.timeout,
-                    verbose=self.verbose,
-                    output_manager=output_manager
-                )
-                analysis_time = time.time() - phase_start
-                result.analysis_phases["binary_analysis"] = analysis_time
+            # Use unified configuration system for all profiles
+            if self.profile in ["fast", "balanced", "thorough", "paranoid", "memory_safe"]:
+                # Use profile-based configuration
+                config = AnalysisConfig.from_profile(self.profile)
+                # Override timeout if specified
+                if self.timeout != config.timeout:
+                    config.timeout = self.timeout
             else:
-                # Use standard analyzer
+                # Use standard configuration
                 config = AnalysisConfig(
                     timeout=self.timeout,
                     debug=False,
                     verbose=self.verbose
                 )
-                context = AnalysisContext.create_for_driver(
-                    driver_path, 
-                    config, 
-                    output_manager=output_manager
-                )
-                
-                # Track phase timing
-                phase_start = time.time()
-                
-                # Run analysis
-                analyzer = DriverAnalyzer(context)
-                
-                # Phase 1: Binary analysis
-                phase1_start = time.time()
-                raw_result = analyzer.analyze()
-                phase1_time = time.time() - phase1_start
-                result.analysis_phases["binary_analysis"] = phase1_time
-                
-                # Get unified result
-                analysis_time = time.time() - phase_start
-                unified_result = output_manager.create_result(
-                    raw_result=raw_result,
-                    analysis_time=analysis_time
-                )
+            
+            # Apply common settings
+            config.verbose = self.verbose
+            config.debug = False
+            
+            # Create context with configuration
+            context = AnalysisContext.create_for_driver(
+                driver_path, 
+                config, 
+                output_manager=output_manager
+            )
+            
+            # Track phase timing
+            phase_start = time.time()
+            
+            # Run analysis
+            analyzer = DriverAnalyzer(context)
+            
+            # Phase 1: Binary analysis
+            phase1_start = time.time()
+            raw_result = analyzer.analyze()
+            phase1_time = time.time() - phase1_start
+            result.analysis_phases["binary_analysis"] = phase1_time
+            
+            # Get unified result
+            analysis_time = time.time() - phase_start
+            unified_result = output_manager.create_result(
+                raw_result=raw_result,
+                analysis_time=analysis_time
+            )
             
             # Extract results
             result.success = len(unified_result.errors) == 0
@@ -371,7 +370,7 @@ class BenchmarkRunner:
         summary = {
             "metadata": {
                 "benchmark_version": "1.0.0",
-                "ioctlance_version": "0.3.0",
+                "ioctlance_version": __version__,
                 "start_time": self.start_time.isoformat(),
                 "end_time": self.end_time.isoformat(),
                 "total_duration_seconds": (self.end_time - self.start_time).total_seconds(),
