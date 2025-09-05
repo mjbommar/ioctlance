@@ -26,7 +26,7 @@ class BatchAuditConfig(BaseModel):
     filter_type: str | None = None
     skip_likely_false_positives: bool = True
     audit_limit: int | None = None
-    claude_command: str = Field(default="claude")
+    claude_command: str = Field(default="npx @anthropic-ai/claude-code")
     verbose: bool = False
 
     class Config:

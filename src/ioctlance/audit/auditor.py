@@ -43,12 +43,12 @@ class AuditResult(BaseModel):
 class VulnerabilityAuditor:
     """Audits individual vulnerabilities using Claude Code CLI."""
 
-    def __init__(self, claude_command: str = "claude", verbose: bool = False):
+    def __init__(self, claude_command: str = "npx @anthropic-ai/claude-code", verbose: bool = False):
         """
         Initialize the auditor.
 
         Args:
-            claude_command: Path to Claude Code CLI command
+            claude_command: Path to Claude Code CLI command (default: npx @anthropic-ai/claude-code)
             verbose: Enable verbose output
         """
         self.claude_command = claude_command
@@ -113,25 +113,16 @@ Output: {{"classification": "TRUE_POSITIVE/FALSE_POSITIVE/NEEDS_REVIEW", "confid
 
     def _run_claude(self, prompt: str, timeout: int) -> str:
         """Run Claude Code CLI with the given prompt."""
-        # Check if claude command exists
-        import shutil
-
-        if not shutil.which(self.claude_command):
-            raise FileNotFoundError(
-                f"Claude CLI not found: '{self.claude_command}'\n"
-                f"Please install with: npm install -g @anthropic-ai/claude-code\n"
-                f"Or specify path with --claude-command /path/to/claude"
-            )
-
         # Write prompt to temporary file (handles complex prompts better)
         with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
             f.write(prompt)
             prompt_file = f.name
 
         try:
-            # Run Claude Code in headless mode
-            cmd = [
-                self.claude_command,
+            # Run Claude Code using npx (will auto-install if needed)
+            # Split the command if it contains spaces (e.g., "npx @anthropic-ai/claude-code")
+            cmd_parts = self.claude_command.split()
+            cmd = cmd_parts + [
                 "-p",
                 f"@{prompt_file}",  # @ prefix to read from file
             ]

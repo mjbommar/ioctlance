@@ -41,7 +41,7 @@ Examples:
 
     parser.add_argument("--parallel", type=int, default=1, help="Parallel workers for batch")
 
-    parser.add_argument("--claude-command", default="claude", help="Path to Claude CLI command")
+    parser.add_argument("--claude-command", default="npx @anthropic-ai/claude-code", help="Claude CLI command (default: npx @anthropic-ai/claude-code)")
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
 
@@ -93,7 +93,9 @@ Examples:
         all_vulns = []
         for driver_result in data["results"]:
             driver_data = driver_result.get("result", {})
-            driver_path = Path(driver_data.get("fingerprint", {}).get("file_path", driver_result.get("driver", "unknown")))
+            driver_path = Path(
+                driver_data.get("fingerprint", {}).get("file_path", driver_result.get("driver", "unknown"))
+            )
             driver_vulns = driver_data.get("vulnerabilities", [])
 
             for v in driver_vulns:
