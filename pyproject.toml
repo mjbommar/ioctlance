@@ -42,6 +42,7 @@ dev = [
 [project.scripts]
 ioctlance = "ioctlance.cli:main"
 ioctlance-batch = "ioctlance.cli_batch:main"
+ioctlance-audit = "ioctlance.cli_audit:main"
 
 [build-system]
 requires = ["hatchling"]
