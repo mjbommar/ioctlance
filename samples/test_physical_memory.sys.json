@@ -1,0 +1,442 @@
+{
+  "fingerprint": {
+    "blake2b": "0e7dca530591bdddeaf32802c289eb744acce258fd6dc517cbfcc990ddc87ff4213b6144ca8396c2f33c1c687f6dd3c9b67142a9902e157aced5a7b39b62651a",
+    "sha256": "d730176b7726f219413b9c77482f1d7b8ae5619f5dfe3dbd76048acada1676be",
+    "sha1": "95abd62775a7816e870e8d0f05ed3dd5c09b0c4a",
+    "md5": "1a040165d4c10a68b64e0c0a74c6cfb0",
+    "file_path": "/home/mjbommar/src/ioctlance/samples/test_physical_memory.sys",
+    "file_name": "test_physical_memory.sys",
+    "file_size": 8481,
+    "imphash": "4f3cb3613ca2c6f79ce76d8217995b41",
+    "compilation_timestamp": 1755387656,
+    "compilation_date": "2025-08-16T19:40:56",
+    "file_version": null,
+    "product_version": null,
+    "company_name": null,
+    "product_name": null,
+    "original_filename": null,
+    "fingerprinted_at": "2025-09-04T20:34:43.820360"
+  },
+  "summary": {
+    "driver_name": "test_physical_memory.sys",
+    "driver_hash": "0e7dca530591bdddeaf32802c289eb744acce258fd6dc517cbfcc990ddc87ff4213b6144ca8396c2f33c1c687f6dd3c9b67142a9902e157aced5a7b39b62651a",
+    "analysis_time": 7.499634504318237,
+    "analysis_date": "2025-09-04T20:34:51.563872",
+    "ioctl_codes_found": 10,
+    "ioctl_codes": [
+      "0x12c800",
+      "0x12c804",
+      "0x12c80c",
+      "0x12c810",
+      "0x12c814",
+      "0x12c8c0",
+      "0x12c8c4",
+      "0x222400",
+      "0x222404",
+      "0x222408"
+    ],
+    "vulnerabilities_found": 9,
+    "unique_vulnerabilities": 4,
+    "severity_breakdown": {
+      "HIGH": 3,
+      "CRITICAL": 3,
+      "MEDIUM": 3
+    },
+    "vulnerability_summary": [
+      {
+        "type": "UNKNOWN",
+        "severity": "CRITICAL",
+        "count": 2,
+        "ioctl_codes": [
+          "0x222404",
+          "0x222400"
+        ],
+        "first_seen": "2025-09-04T20:34:51.563581"
+      },
+      {
+        "type": "BUFFER_OVERFLOW",
+        "severity": "CRITICAL",
+        "count": 1,
+        "ioctl_codes": [
+          "0x222404"
+        ],
+        "first_seen": "2025-09-04T20:34:51.563728"
+      },
+      {
+        "type": "NULL_POINTER_DEREFERENCE",
+        "severity": "HIGH",
+        "count": 3,
+        "ioctl_codes": [
+          "0x222404",
+          "0x222400",
+          "0x222408"
+        ],
+        "first_seen": "2025-09-04T20:34:51.563512"
+      },
+      {
+        "type": "RACE_CONDITION",
+        "severity": "MEDIUM",
+        "count": 3,
+        "ioctl_codes": [
+          "0x222404",
+          "0x222408"
+        ],
+        "first_seen": "2025-09-04T20:34:51.563635"
+      }
+    ]
+  },
+  "vulnerabilities": [
+    {
+      "vulnerability": {
+        "title": "Null Pointer Dereference - Input Buffer",
+        "description": "mem read on null input buffer",
+        "state": "<SimState @ 0x2a0921084>",
+        "eval": {
+          "IoControlCode": "0x222400",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {
+          "buffer": "SystemBuffer",
+          "operation": "mem_read",
+          "address": "<BV64 SystemBuffer_10_64 + 0x8>"
+        },
+        "others": {
+          "severity": "HIGH",
+          "exploitation": "Denial of service, potential code execution",
+          "confidence": "HIGH",
+          "mitigation": "Check buffer pointers before use",
+          "windows_specific": "Can trigger BSOD with PAGE_FAULT_IN_NONPAGED_AREA"
+        },
+        "discovered_at": "2025-09-04 20:34:51.562970",
+        "severity": "HIGH"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Null Pointer Dereference - Input Buffer_0x222400",
+        "instance_id": "92324769-dda0-47e3-961f-f5a2370690ca",
+        "first_seen": "2025-09-04T20:34:51.563512",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Arbitrary Physical Memory Mapping - MmMapIoSpace",
+        "description": "User controls address in MmMapIoSpace",
+        "state": "<SimState @ 0x2a0a00010>",
+        "eval": {
+          "IoControlCode": "0x222400",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {
+          "physical_address": "<BV64 mem_fffffffffffffff8_98_64>",
+          "number_of_bytes": "<BV64 0x488945a8488b45e0>",
+          "tainted_address": "True",
+          "tainted_size": "False",
+          "ioctl_code": "0x222400"
+        },
+        "others": {
+          "severity": "CRITICAL",
+          "exploitation": "Map arbitrary physical memory, read/write kernel",
+          "confidence": "HIGH",
+          "impact": "Full system compromise",
+          "cve_pattern": "CVE-2019-16098, CVE-2020-12446",
+          "mitigation": "Validate physical addresses, use MDL instead",
+          "windows_specific": "Can bypass KASLR, read credentials, patch kernel"
+        },
+        "discovered_at": "2025-09-04 20:34:51.562998",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Arbitrary Physical Memory Mapping - MmMapIoSpace_0x222400",
+        "instance_id": "511c547e-1536-4205-a0f5-9d42e82c7c41",
+        "first_seen": "2025-09-04T20:34:51.563581",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x2a0921000",
+        "state": "<SimState @ 0x2a09210f4>",
+        "eval": {
+          "IoControlCode": "0x222404",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x2a0921000",
+          "first_read_state": "0x2a0921084",
+          "second_read_address": "0x2a0921000",
+          "second_read_state": "0x2a09210f4",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563016",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x222404",
+        "instance_id": "e174ccba-cd2a-40b3-b796-8c83672bd7be",
+        "first_seen": "2025-09-04T20:34:51.563635",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Null Pointer Dereference - Input Buffer",
+        "description": "mem read on null input buffer",
+        "state": "<SimState @ 0x2a09210f4>",
+        "eval": {
+          "IoControlCode": "0x222404",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {
+          "buffer": "SystemBuffer",
+          "operation": "mem_read",
+          "address": "<BV64 SystemBuffer_10_64 + 0x8>"
+        },
+        "others": {
+          "severity": "HIGH",
+          "exploitation": "Denial of service, potential code execution",
+          "confidence": "HIGH",
+          "mitigation": "Check buffer pointers before use",
+          "windows_specific": "Can trigger BSOD with PAGE_FAULT_IN_NONPAGED_AREA"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563039",
+        "severity": "HIGH"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Null Pointer Dereference - Input Buffer_0x222404",
+        "instance_id": "05b2e72a-2178-421e-8400-a7d42a681abe",
+        "first_seen": "2025-09-04T20:34:51.563681",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x2a0a00000",
+        "state": "<SimState @ 0x2a0a00028>",
+        "eval": {
+          "IoControlCode": "0x222404",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x2a0a00000",
+          "first_read_state": "0x2a0a00010",
+          "second_read_address": "0x2a0a00000",
+          "second_read_state": "0x2a0a00028",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563054",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x222404",
+        "instance_id": "33c50b4d-8694-4063-bdf6-9b3b54b7e31d",
+        "first_seen": "2025-09-04T20:34:51.563699",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Arbitrary Memory Mapping - ZwMapViewOfSection",
+        "description": "User-controlled parameters in ZwMapViewOfSection",
+        "state": "<SimState @ 0x2a0a00028>",
+        "eval": {
+          "IoControlCode": "0x222404",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {
+          "section_handle": "<BV64 mem_89c1488b05a74ed0_184_64>",
+          "process_handle": "<BV64 0xffffffffffffffff>",
+          "base_address": "<BV64 0x89c1488b05a74eb0>",
+          "ioctl_code": "0x222404"
+        },
+        "others": {
+          "severity": "CRITICAL",
+          "exploitation": "Map arbitrary memory sections",
+          "confidence": "HIGH",
+          "impact": "Memory disclosure, privilege escalation",
+          "mitigation": "Validate handles and addresses"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563069",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Arbitrary Memory Mapping - ZwMapViewOfSection_0x222404",
+        "instance_id": "8e4fc8bf-0e1a-4205-80a0-cab25e8354d5",
+        "first_seen": "2025-09-04T20:34:51.563713",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Buffer Overflow - Controllable PC",
+        "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
+        "state": "<SimState @ <BV64 mem_ffd0e9ea0000e8_205_64>>",
+        "eval": {
+          "IoControlCode": "0x222404",
+          "SystemBuffer": "0x0",
+          "Type3InputBuffer": "0x0",
+          "UserBuffer": "0x0",
+          "InputBufferLength": "0x0",
+          "OutputBufferLength": "0x0"
+        },
+        "parameters": {},
+        "others": {
+          "severity": "CRITICAL",
+          "type": "unconstrained_state"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563083",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Buffer Overflow - Controllable PC_0x222404",
+        "instance_id": "5fc796b3-3d73-4a86-90b8-06615f1d0f4a",
+        "first_seen": "2025-09-04T20:34:51.563728",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x2a0921000",
+        "state": "<SimState @ 0x2a09211a3>",
+        "eval": {
+          "IoControlCode": "0x222408",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x2a0921000",
+          "first_read_state": "0x2a0921084",
+          "second_read_address": "0x2a0921000",
+          "second_read_state": "0x2a09211a3",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563097",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x222408",
+        "instance_id": "887293e5-114d-467a-ac3a-f7d051f82934",
+        "first_seen": "2025-09-04T20:34:51.563740",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Null Pointer Dereference - Input Buffer",
+        "description": "mem read on null input buffer",
+        "state": "<SimState @ 0x2a09211a3>",
+        "eval": {
+          "IoControlCode": "0x222408",
+          "SystemBuffer": "0x6",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {
+          "buffer": "SystemBuffer",
+          "operation": "mem_read",
+          "address": "<BV64 SystemBuffer_10_64 + 0x10>"
+        },
+        "others": {
+          "severity": "HIGH",
+          "exploitation": "Denial of service, potential code execution",
+          "confidence": "HIGH",
+          "mitigation": "Check buffer pointers before use",
+          "windows_specific": "Can trigger BSOD with PAGE_FAULT_IN_NONPAGED_AREA"
+        },
+        "discovered_at": "2025-09-04 20:34:51.563110",
+        "severity": "HIGH"
+      },
+      "context": {
+        "ioctl_handler_address": "0x2a0921000",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Null Pointer Dereference - Input Buffer_0x222408",
+        "instance_id": "f3526de2-e241-4ccc-ad01-a877966eac7c",
+        "first_seen": "2025-09-04T20:34:51.563752",
+        "occurrence_count": 1
+      }
+    }
+  ]
+}
