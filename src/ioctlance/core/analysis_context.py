@@ -57,7 +57,7 @@ class AnalysisConfig(BaseModel):
 
     # Functions to exclude (list of hex addresses)
     exclude_functions: list[str] = Field(default_factory=list)
-    
+
     # Post-detection verification settings
     verification_enabled: bool = True  # Enable post-detection verification
     verification_level: str = "standard"  # none | basic | standard | deep
@@ -71,7 +71,7 @@ class AnalysisConfig(BaseModel):
         if v.lower() not in valid_levels:
             raise ValueError(f"verification_level must be one of {valid_levels}")
         return v.lower()
-    
+
     @field_validator("timeout")
     @classmethod
     def validate_timeout(cls, v: int) -> int:
@@ -629,31 +629,32 @@ class AnalysisContext:
         if self.config.verification_enabled and self.config.verification_level != "none":
             # Lazy import to avoid circular dependency
             from ..verification.manager import VerificationManager, VerificationLevel
-            
+
             # Create verification manager if not exists
             if not hasattr(self, "_verification_manager"):
                 level_map = {
                     "basic": VerificationLevel.BASIC,
                     "standard": VerificationLevel.STANDARD,
-                    "deep": VerificationLevel.DEEP
+                    "deep": VerificationLevel.DEEP,
                 }
                 level = level_map.get(self.config.verification_level, VerificationLevel.STANDARD)
                 self._verification_manager = VerificationManager(self, level)
-                
+
             # Verify the vulnerability
             verified_vuln = self._verification_manager.verify_vulnerability(vuln_info)
-            
+
             # Check if filtered as false positive
             if verified_vuln is None and self.config.filter_false_positives:
                 import logging
+
                 logger = logging.getLogger(__name__)
                 logger.info(f"Filtered false positive: {vuln_info.get('title')}")
                 return  # Don't add to vulnerabilities list
-                
+
             # Use verified version if available
             if verified_vuln:
                 vuln_info = verified_vuln
-                
+
         # Use enhanced reporting if output manager is available
         if self.output_manager:
             try:

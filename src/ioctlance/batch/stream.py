@@ -22,37 +22,33 @@ class JSONLStreamer:
         mode = "ab" if cfg.resume_from and cfg.resume_from == cfg.output_path else "wb"
         # Unbuffered binary mode for immediate writes regardless of stdio buffering
         self._fh = open(cfg.output_path, mode, buffering=0)
-        
+
         # Initialize verification manager if enabled
         self._verification_manager: Optional[Any] = None
-        self._verification_stats = {
-            "total": 0,
-            "verified": 0,
-            "false_positives": 0,
-            "reclassified": 0
-        }
-        
+        self._verification_stats = {"total": 0, "verified": 0, "false_positives": 0, "reclassified": 0}
+
         if cfg.verification_enabled and cfg.verification_level != "none":
             try:
                 from ..verification.manager import VerificationManager, VerificationLevel
                 from ..verification.registry import verifier_registry
+
                 # Import verifiers to register them
                 from ..verification.unconstrained_verifier import UnconstrainedStateVerifier
                 from ..verification.double_free_verifier import DoubleFreeVerifier
-                
+
                 level_map = {
                     "basic": VerificationLevel.BASIC,
                     "standard": VerificationLevel.STANDARD,
-                    "deep": VerificationLevel.DEEP
+                    "deep": VerificationLevel.DEEP,
                 }
                 level = level_map.get(cfg.verification_level, VerificationLevel.STANDARD)
-                
+
                 # Create mock context for verification
                 class MockContext:
                     def __init__(self):
                         self.config = cfg
                         self.io_control_code = None
-                        
+
                 self._verification_manager = VerificationManager(MockContext(), level)
                 logger.info(f"Verification enabled at level: {cfg.verification_level}")
             except Exception as e:
@@ -80,13 +76,13 @@ class JSONLStreamer:
         """Verify a vulnerability and return verified version or None if filtered."""
         if not self._verification_manager:
             return vuln_dict
-            
+
         self._verification_stats["total"] += 1
-        
+
         # Create mock state if eval parameters exist
         if "eval" in vuln_dict.get("vulnerability", {}):
             eval_params = vuln_dict["vulnerability"]["eval"]
-            
+
             # Create minimal mock state for verification
             class MockState:
                 def __init__(self, params):
@@ -94,21 +90,21 @@ class JSONLStreamer:
                     self.inspect = MockInspect(params)
                     self.globals = params
                     self.history = MockHistory()
-                    
+
             class MockSolver:
                 def __init__(self, params):
                     self.params = params
-                    
+
                 def eval_one(self, val, default=None):
                     # Check for NULL buffer
                     sys_buf = self.params.get("SystemBuffer", "0x0")
                     if sys_buf == "0x0":
                         return 0
                     return default if default is not None else 0x1000
-                    
+
                 def symbolic(self, val):
                     return False
-                    
+
             class MockInspect:
                 def __init__(self, params):
                     sys_buf = params.get("SystemBuffer", "0x0")
@@ -118,49 +114,46 @@ class JSONLStreamer:
                     else:
                         self.mem_read_address = None
                         self.mem_write_address = None
-                        
+
             class MockHistory:
                 def __init__(self):
-                    self.descriptions = type('obj', (object,), {'hardcopy': []})()
-                    
+                    self.descriptions = type("obj", (object,), {"hardcopy": []})()
+
             vuln_dict["vulnerability"]["state"] = MockState(eval_params)
-            
+
         # Verify the vulnerability
         verified = self._verification_manager.verify_vulnerability(vuln_dict["vulnerability"])
-        
+
         if verified is None:
             self._verification_stats["false_positives"] += 1
             return None  # Filtered as false positive
-            
+
         # Check for reclassification
         original_title = vuln_dict["vulnerability"].get("title", "")
         new_title = verified.get("title", "")
         if new_title != original_title:
             self._verification_stats["reclassified"] += 1
             logger.debug(f"Reclassified: {original_title} -> {new_title}")
-            
+
         self._verification_stats["verified"] += 1
-        
+
         # Remove non-serializable state
         if "state" in verified:
             del verified["state"]
-            
+
         vuln_dict["vulnerability"] = verified
         return vuln_dict
-    
+
     def write_unified(self, driver: Path, unified: UnifiedAnalysisResult) -> None:
         # Process vulnerabilities through verification queue
         verified_vulns = []
-        
+
         for vuln in unified.vulnerabilities:
             vuln_dict = {
                 "vulnerability": vuln.to_summary_dict(),
-                "metadata": {
-                    "driver": str(driver),
-                    "fingerprint": unified.fingerprint.model_dump()
-                }
+                "metadata": {"driver": str(driver), "fingerprint": unified.fingerprint.model_dump()},
             }
-            
+
             # Verify vulnerability (may filter false positives)
             if self._verification_manager and self.cfg.verification_enabled:
                 verified_dict = self._verify_vulnerability(vuln_dict)
@@ -168,9 +161,9 @@ class JSONLStreamer:
                     continue  # Skip false positive
                 elif verified_dict:
                     vuln_dict = verified_dict
-                    
+
             verified_vulns.append(vuln_dict)
-            
+
         # Write verified vulnerabilities
         for vuln_dict in verified_vulns:
             self._write(
@@ -181,7 +174,7 @@ class JSONLStreamer:
                     "data": vuln_dict["vulnerability"],
                 }
             )
-            
+
         # Log verification stats periodically
         if self._verification_stats["total"] > 0 and self._verification_stats["total"] % 100 == 0:
             logger.info(
@@ -189,7 +182,7 @@ class JSONLStreamer:
                 f"{self._verification_stats['false_positives']} FPs filtered, "
                 f"{self._verification_stats['reclassified']} reclassified"
             )
-            
+
         # Summary line
         self._write(
             {

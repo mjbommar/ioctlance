@@ -99,32 +99,26 @@ Examples:
     parser.add_argument("--no-progress", action="store_true", help="Disable progress display")
 
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
-    
+
     # Verification settings (enabled by default for better accuracy)
     parser.add_argument(
         "--no-verify",
         action="store_true",
-        help="Disable post-detection verification (not recommended - increases false positives)"
+        help="Disable post-detection verification (not recommended - increases false positives)",
     )
-    
+
     parser.add_argument(
         "--verification-level",
         choices=["none", "basic", "standard", "deep"],
         default="standard",
-        help="Verification depth: none|basic|standard|deep (default: standard)"
+        help="Verification depth: none|basic|standard|deep (default: standard)",
     )
-    
+
     parser.add_argument(
-        "--keep-false-positives",
-        action="store_true",
-        help="Don't filter false positives (keeps all detections)"
+        "--keep-false-positives", action="store_true", help="Don't filter false positives (keeps all detections)"
     )
-    
-    parser.add_argument(
-        "--no-reclassify",
-        action="store_true",
-        help="Don't reclassify misidentified vulnerabilities"
-    )
+
+    parser.add_argument("--no-reclassify", action="store_true", help="Don't reclassify misidentified vulnerabilities")
 
     args = parser.parse_args()
 

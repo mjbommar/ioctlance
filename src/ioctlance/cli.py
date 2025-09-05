@@ -96,6 +96,14 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json", action="store_true", help="Output results as JSON to stdout")
 
     parser.add_argument(
+        "--audit", action="store_true", help="Automatically audit vulnerabilities with Claude Code after scanning"
+    )
+
+    parser.add_argument(
+        "--audit-timeout", type=int, default=180, help="Timeout for each vulnerability audit in seconds"
+    )
+
+    parser.add_argument(
         "--format",
         choices=["json", "jsonl", "markdown", "html", "csv", "sarif"],
         default="json",
@@ -413,6 +421,74 @@ def main(argv: list[str] | None = None) -> int:
                 print(output_data)
             else:
                 print(json.dumps(output_data, indent=2))
+
+    # Run audit if requested
+    if args.audit and all_results:
+        logger.info("Starting automatic vulnerability audit with Claude Code...")
+        try:
+            from .audit import VulnerabilityAuditor
+
+            auditor = VulnerabilityAuditor(verbose=args.verbose)
+            audit_results = []
+
+            for result_entry in all_results:
+                driver_path = Path(result_entry.get("driver", "unknown"))
+                result = result_entry.get("result")
+
+                # Extract vulnerabilities from result
+                if hasattr(result, "vulnerabilities"):
+                    vulns = result.vulnerabilities
+                elif isinstance(result, dict):
+                    vulns = result.get("vulnerabilities", [])
+                else:
+                    continue
+
+                for vuln in vulns:
+                    # Extract the actual vulnerability data
+                    if isinstance(vuln, dict) and "vulnerability" in vuln:
+                        vuln_data = vuln["vulnerability"]
+                    else:
+                        vuln_data = vuln
+
+                    logger.info(f"Auditing: {vuln_data.get('title', 'Unknown')} in {driver_path.name}")
+
+                    try:
+                        audit_result = auditor.audit(
+                            driver_path=driver_path, vulnerability=vuln_data, timeout=args.audit_timeout
+                        )
+
+                        logger.info(
+                            f"  Classification: {audit_result.classification} ({audit_result.confidence}% confidence)"
+                        )
+                        audit_results.append(
+                            {
+                                "driver": str(driver_path),
+                                "vulnerability": vuln_data.get("title"),
+                                "classification": audit_result.classification,
+                                "confidence": audit_result.confidence,
+                            }
+                        )
+
+                    except Exception as e:
+                        logger.error(f"  Audit failed: {e}")
+
+            # Show audit summary
+            if audit_results:
+                true_positives = sum(1 for r in audit_results if r["classification"] == "TRUE_POSITIVE")
+                false_positives = sum(1 for r in audit_results if r["classification"] == "FALSE_POSITIVE")
+                logger.info(f"\nAudit Summary: {true_positives} true positives, {false_positives} false positives")
+
+                # Save audit results if output was specified
+                if args.output:
+                    audit_output = Path(str(args.output).replace(".json", "_audit.json"))
+                    with open(audit_output, "w") as f:
+                        json.dump(audit_results, f, indent=2)
+                    logger.info(f"Audit results saved to: {audit_output}")
+
+        except ImportError:
+            logger.error("Audit module not available. Install with: pip install claude-code")
+        except Exception as e:
+            logger.error(f"Audit failed: {e}")
 
     # Summary for batch mode
     if len(driver_files) > 1:
