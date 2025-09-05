@@ -1,48 +1,1222 @@
 {
-    "basic": {
-        "path": "samples/RtDashPt.sys",
-        "DeviceName": [],
-        "time": {
-            "ioctl handler": 0,
-            "hunting vulns": 45
-        },
-        "memory": {
-            "ioctl handler": 20324,
-            "hunting vulns": 752804
-        },
-        "unique addr": {
-            "ioctl handler": 145,
-            "hunting vulns": 482
-        },
-        "ioctl handler": "0x140007080",
-        "IoControlCodes": [
-            "0x12c804",
-            "0x12c810",
-            "0x12c8c0",
-            "0x12c8c4",
-            "0x12c814",
-            "0x12c80c",
-            "0x12c800"
-        ]
-    },
-    "vuln": [
-        {
-            "title": "null pointer dereference - input buffer",
-            "description": "read input buffer",
-            "state": "<SimState @ 0x140007122>",
-            "eval": {
-                "IoControlCode": "0x12c8c0",
-                "SystemBuffer": "0x0",
-                "Type3InputBuffer": "0x0",
-                "UserBuffer": "0x0",
-                "InputBufferLength": "0x0",
-                "OutputBufferLength": "0x0"
-            },
-            "parameters": {},
-            "others": {
-                "read from": "<BV64 SystemBuffer_61_64 + 0x8>"
-            }
-        }
+  "fingerprint": {
+    "blake2b": "e1ae99098d2c3447a88dc0325d5454de3c32eb0ed22d27b1cd08580f624707a5c41282f852fa079fbda55a9eda8bcde562a50d924c7cc5394a2818ff88bc7506",
+    "sha256": "762141766c880b17d10dc8e1b2e51f146f32e37fdcab1e3d7fc163a8552e6db4",
+    "sha1": "8753cfc8b996a5f0b35b796d4412b0f688d9a637",
+    "md5": "df374efe46aa26c6254cd5dbf1fd5c96",
+    "file_path": "/home/mjbommar/src/ioctlance/samples/RtDashPt.sys",
+    "file_name": "RtDashPt.sys",
+    "file_size": 55976,
+    "imphash": "0281b510e24c069441c0ce60fee2e883",
+    "compilation_timestamp": 1360140664,
+    "compilation_date": "2013-02-06T03:51:04",
+    "file_version": null,
+    "product_version": null,
+    "company_name": null,
+    "product_name": null,
+    "original_filename": null,
+    "fingerprinted_at": "2025-09-04T18:25:33.976014"
+  },
+  "summary": {
+    "driver_name": "RtDashPt.sys",
+    "driver_hash": "e1ae99098d2c3447a88dc0325d5454de3c32eb0ed22d27b1cd08580f624707a5c41282f852fa079fbda55a9eda8bcde562a50d924c7cc5394a2818ff88bc7506",
+    "analysis_time": 119.39390158653259,
+    "analysis_date": "2025-09-04T18:27:33.668634",
+    "ioctl_codes_found": 11,
+    "ioctl_codes": [
+      "0x12c800",
+      "0x12c804",
+      "0x12c80c",
+      "0x12c810",
+      "0x12c814",
+      "0x12c8c0",
+      "0x12c8c4",
+      "0x12c804",
+      "0x12c80c",
+      "0x12c810",
+      "0x12c814"
     ],
-    "error": []
+    "vulnerabilities_found": 31,
+    "unique_vulnerabilities": 2,
+    "severity_breakdown": {
+      "MEDIUM": 26,
+      "CRITICAL": 5
+    },
+    "vulnerability_summary": [
+      {
+        "type": "BUFFER_OVERFLOW",
+        "severity": "CRITICAL",
+        "count": 5,
+        "ioctl_codes": [
+          "0x12c814"
+        ],
+        "first_seen": "2025-09-04T18:27:33.668377"
+      },
+      {
+        "type": "RACE_CONDITION",
+        "severity": "MEDIUM",
+        "count": 26,
+        "ioctl_codes": [
+          "0x12c804",
+          "0x12c814"
+        ],
+        "first_seen": "2025-09-04T18:27:33.667999"
+      }
+    ]
+  },
+  "vulnerabilities": [
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001b49>",
+        "eval": {
+          "IoControlCode": "0x12c804",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0xc"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001b49",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.666784",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c804",
+        "instance_id": "2d1e34c4-dd4b-4298-a085-c6b07adac0b7",
+        "first_seen": "2025-09-04T18:27:33.667999",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001b49>",
+        "eval": {
+          "IoControlCode": "0x12c804",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0xc"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001b49",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.666819",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c804",
+        "instance_id": "7cf441ee-aeeb-4d85-8126-edc24e299918",
+        "first_seen": "2025-09-04T18:27:33.668067",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x47",
+        "state": "<SimState @ 0x140001b49>",
+        "eval": {
+          "IoControlCode": "0x12c804",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0xc"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x47",
+          "first_read_state": "0x140001b0e",
+          "second_read_address": "0x47",
+          "second_read_state": "0x140001b49",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.666976",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c804",
+        "instance_id": "9a74fda7-0fae-473e-a2b7-886f9d137d5f",
+        "first_seen": "2025-09-04T18:27:33.668120",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001b52>",
+        "eval": {
+          "IoControlCode": "0x12c804",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0xc"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001b52",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667081",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c804",
+        "instance_id": "18041675-1611-41d1-a9f5-1098165d1f5a",
+        "first_seen": "2025-09-04T18:27:33.668159",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001b52>",
+        "eval": {
+          "IoControlCode": "0x12c804",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0xc"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001b52",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667103",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c804",
+        "instance_id": "2e0aaf9b-35e7-4455-bc30-8ff38deedf5a",
+        "first_seen": "2025-09-04T18:27:33.668173",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x47",
+        "state": "<SimState @ 0x140001b52>",
+        "eval": {
+          "IoControlCode": "0x12c804",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0x6",
+          "OutputBufferLength": "0xc"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x47",
+          "first_read_state": "0x140001b0e",
+          "second_read_address": "0x47",
+          "second_read_state": "0x140001b52",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667119",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c804",
+        "instance_id": "a9f4d2d8-d940-4fd5-9f22-cbfb0257fb39",
+        "first_seen": "2025-09-04T18:27:33.668184",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001cfc>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001cfc",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667136",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "35eb82d5-3089-4d9a-93a7-08dda1f8cd08",
+        "first_seen": "2025-09-04T18:27:33.668196",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020004",
+        "state": "<SimState @ 0x140001cfc>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020004",
+          "second_read_state": "0x140001cfc",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667151",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "92621ded-37ba-4b19-9d10-76426e9e8d83",
+        "first_seen": "2025-09-04T18:27:33.668208",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001d2b>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001d2b",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667173",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "da263eb7-7c0c-4497-818b-50ad6a769c8b",
+        "first_seen": "2025-09-04T18:27:33.668223",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001d2b>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001d2b",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667191",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "b15f6477-812c-4313-8675-365a93feb6e2",
+        "first_seen": "2025-09-04T18:27:33.668243",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x69",
+        "state": "<SimState @ 0x140001d2b>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x69",
+          "first_read_state": "0x140001ce9",
+          "second_read_address": "0x69",
+          "second_read_state": "0x140001d2b",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667206",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "4d121168-cccb-4452-88ea-6185f13fa2a1",
+        "first_seen": "2025-09-04T18:27:33.668254",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001d2e>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001d2e",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667218",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "8d43a863-106a-4be1-b86e-07b9df51ae40",
+        "first_seen": "2025-09-04T18:27:33.668266",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001d2e>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001d2e",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667446",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "d05d4c5e-da67-4c49-808f-ad8b4b1930f8",
+        "first_seen": "2025-09-04T18:27:33.668278",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x11",
+        "state": "<SimState @ 0x140001d2e>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x1c",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0xf",
+          "first_read_state": "0x14000176a",
+          "second_read_address": "0x11",
+          "second_read_state": "0x140001d2e",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667455",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "d7b80807-01a2-4164-81ec-5789b231a82a",
+        "first_seen": "2025-09-04T18:27:33.668289",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001d34>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001d34",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667463",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "52df117a-d22a-4309-97e2-db63fabd50b7",
+        "first_seen": "2025-09-04T18:27:33.668303",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001d34>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001d34",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667471",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "e305189b-bc75-4ea1-9d3b-10c43558a042",
+        "first_seen": "2025-09-04T18:27:33.668315",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x69",
+        "state": "<SimState @ 0x140001d34>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x69",
+          "first_read_state": "0x140001ce9",
+          "second_read_address": "0x69",
+          "second_read_state": "0x140001d34",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667480",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "d648f1bf-1f45-4014-bd15-2a5afd7a62f1",
+        "first_seen": "2025-09-04T18:27:33.668329",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001d58>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001d58",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667492",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "557376f9-9e28-4db2-96b1-36a4800c8ccb",
+        "first_seen": "2025-09-04T18:27:33.668341",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001d58>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001d58",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667501",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "5de92b2e-e49f-4eee-83bb-1941cf4b493e",
+        "first_seen": "2025-09-04T18:27:33.668352",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x21",
+        "state": "<SimState @ 0x140001d58>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x21",
+          "first_read_state": "0x140001d58",
+          "second_read_address": "0x21",
+          "second_read_state": "0x140001d58",
+          "read_size": "1",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667510",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "461db05d-e8fe-49a5-b554-bb68cc188e69",
+        "first_seen": "2025-09-04T18:27:33.668363",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Buffer Overflow - Controllable PC",
+        "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
+        "state": "<SimState @ <BV64 mem_84839117407b95b_251_64>>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x0",
+          "Type3InputBuffer": "0x0",
+          "UserBuffer": "0x0",
+          "InputBufferLength": "0x0",
+          "OutputBufferLength": "0x0"
+        },
+        "parameters": {},
+        "others": {
+          "severity": "CRITICAL",
+          "type": "unconstrained_state"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667521",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Buffer Overflow - Controllable PC_0x12c814",
+        "instance_id": "eb623933-7a57-4fc3-9f60-069d5afe6e37",
+        "first_seen": "2025-09-04T18:27:33.668377",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x140001ce9>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x140001ce9",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667531",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "40bb26a2-3450-47c8-a125-9c19265cbdb2",
+        "first_seen": "2025-09-04T18:27:33.668389",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x140001ce9>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x140001ce9",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667540",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "63a1932d-9c7e-4956-8300-42339de9270d",
+        "first_seen": "2025-09-04T18:27:33.668400",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x69",
+        "state": "<SimState @ 0x140001ce9>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x69",
+          "first_read_state": "0x140001ce9",
+          "second_read_address": "0x69",
+          "second_read_state": "0x140001ce9",
+          "read_size": "4",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667551",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "58bb4387-c760-46cc-bbd3-a1e12f07db3c",
+        "first_seen": "2025-09-04T18:27:33.668414",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x140001000",
+        "state": "<SimState @ 0x14000176a>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x140001000",
+          "first_read_state": "0x140001b49",
+          "second_read_address": "0x140001000",
+          "second_read_state": "0x14000176a",
+          "read_size": "256",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667561",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "2550b83d-5659-49ae-ace5-705cf9e062f4",
+        "first_seen": "2025-09-04T18:27:33.668426",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x50020000",
+        "state": "<SimState @ 0x14000176a>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x50020004",
+          "first_read_state": "0x140001b17",
+          "second_read_address": "0x50020000",
+          "second_read_state": "0x14000176a",
+          "read_size": "64",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667570",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "1a859974-2b44-469f-86b7-9cdaf366aacd",
+        "first_seen": "2025-09-04T18:27:33.668437",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Double-Fetch Race Condition",
+        "description": "Multiple reads from user-space address 0x31",
+        "state": "<SimState @ 0x14000176a>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x50020000",
+          "Type3InputBuffer": "0x6",
+          "UserBuffer": "0x6",
+          "InputBufferLength": "0xc",
+          "OutputBufferLength": "0x6"
+        },
+        "parameters": {},
+        "others": {
+          "first_read_address": "0x31",
+          "first_read_state": "0x14000176a",
+          "second_read_address": "0x31",
+          "second_read_state": "0x14000176a",
+          "read_size": "8",
+          "vulnerability_type": "TOCTOU",
+          "exploitation": "Attacker can modify data between reads to bypass checks"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667580",
+        "severity": "MEDIUM"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Double-Fetch Race Condition_0x12c814",
+        "instance_id": "4e195cd9-24bc-4d1a-b7ac-d4a7a731764a",
+        "first_seen": "2025-09-04T18:27:33.668449",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Buffer Overflow - Controllable PC",
+        "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
+        "state": "<SimState @ <BV64 mem_4528488910488aa0_315_64>>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x0",
+          "Type3InputBuffer": "0x0",
+          "UserBuffer": "0x0",
+          "InputBufferLength": "0x0",
+          "OutputBufferLength": "0x0"
+        },
+        "parameters": {},
+        "others": {
+          "severity": "CRITICAL",
+          "type": "unconstrained_state"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667600",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Buffer Overflow - Controllable PC_0x12c814",
+        "instance_id": "bbc01933-92ce-4915-a77f-30981c8e620f",
+        "first_seen": "2025-09-04T18:27:33.668460",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Buffer Overflow - Controllable PC",
+        "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
+        "state": "<SimState @ <BV64 mem_4528488910488aa0_323_64>>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x0",
+          "Type3InputBuffer": "0x0",
+          "UserBuffer": "0x0",
+          "InputBufferLength": "0x0",
+          "OutputBufferLength": "0x0"
+        },
+        "parameters": {},
+        "others": {
+          "severity": "CRITICAL",
+          "type": "unconstrained_state"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667608",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Buffer Overflow - Controllable PC_0x12c814",
+        "instance_id": "8c07ea1a-5ef9-48d0-8fd4-2e7ba4bd6264",
+        "first_seen": "2025-09-04T18:27:33.668471",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Buffer Overflow - Controllable PC",
+        "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
+        "state": "<SimState @ <BV64 mem_4528488910488aa0_333_64>>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x0",
+          "Type3InputBuffer": "0x0",
+          "UserBuffer": "0x0",
+          "InputBufferLength": "0x0",
+          "OutputBufferLength": "0x0"
+        },
+        "parameters": {},
+        "others": {
+          "severity": "CRITICAL",
+          "type": "unconstrained_state"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667615",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Buffer Overflow - Controllable PC_0x12c814",
+        "instance_id": "57c48b95-2853-4a14-acd2-6a7b4a846f89",
+        "first_seen": "2025-09-04T18:27:33.668483",
+        "occurrence_count": 1
+      }
+    },
+    {
+      "vulnerability": {
+        "title": "Buffer Overflow - Controllable PC",
+        "description": "Unconstrained state with symbolic program counter (likely buffer overflow)",
+        "state": "<SimState @ <BV64 mem_4528488910488aa0_340_64>>",
+        "eval": {
+          "IoControlCode": "0x12c814",
+          "SystemBuffer": "0x0",
+          "Type3InputBuffer": "0x0",
+          "UserBuffer": "0x0",
+          "InputBufferLength": "0x0",
+          "OutputBufferLength": "0x0"
+        },
+        "parameters": {},
+        "others": {
+          "severity": "CRITICAL",
+          "type": "unconstrained_state"
+        },
+        "discovered_at": "2025-09-04 18:27:33.667622",
+        "severity": "CRITICAL"
+      },
+      "context": {
+        "ioctl_handler_address": "0x140007080",
+        "driver_entry_point": null,
+        "analysis_phase": "phase_2"
+      },
+      "metadata": {
+        "dedup_key": "Buffer Overflow - Controllable PC_0x12c814",
+        "instance_id": "e6c7ddc6-6928-4b5f-891f-1d5718aa649b",
+        "first_seen": "2025-09-04T18:27:33.668494",
+        "occurrence_count": 1
+      }
+    }
+  ]
 }
